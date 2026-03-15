@@ -37,18 +37,16 @@ class BaseRepository(Generic[ModelType]):
 
     async def update(self, id: int, **kwargs) -> Optional[ModelType]:
         """Обновление записи"""
-        # Сначала получаем объект
         instance = await self.get(id)
         if not instance:
             return None
 
-        # Обновляем поля
         for key, value in kwargs.items():
             if hasattr(instance, key):
                 setattr(instance, key, value)
 
         await self.session.flush()
-        await self.session.commit()
+        await self.session.commit()  # <-- добавляем commit
         await self.session.refresh(instance)
         return instance
 

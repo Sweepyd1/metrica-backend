@@ -41,4 +41,12 @@ class TutorStudentRepository(BaseRepository[TutorStudent]):
         )
         self.session.add(link)
         await self.session.flush()
-        return link
+        await self.session.commit()  # фиксируем транзакцию
+
+        # После коммита загружаем связь с уже подгруженным студентом
+        result = await self.session.execute(
+            select(TutorStudent)
+            .where(TutorStudent.id == link.id)
+            .options(selectinload(TutorStudent.student))
+        )
+        return result.scalar_one()

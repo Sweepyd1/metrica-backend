@@ -31,20 +31,20 @@ class TutorService:
 
     async def add_student(self, tutor_id: int, email: str) -> TutorStudent:
         student = await self.user_repo.get_by_email(email)
-        if not student or student.role != "student":  # UserRole.STUDENT
+        if not student or student.role != "student":
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Не удалось найти ученика с таким email",
+                status_code=404, detail="Не удалось найти ученика с таким email"
             )
+
         existing = await self.tutor_student_repo.get_by_tutor_and_student(
             tutor_id, student.id
         )
         if existing:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail="Ученик уже добавлен"
-            )
+            raise HTTPException(status_code=400, detail="Ученик уже добавлен")
+
+        # Создаём связь – студент уже загружен внутри репозитория
         link = await self.tutor_student_repo.create(
-            tutor_id=tutor_id, student_id=student.id
+            tutor_id=tutor_id, student_id=student.id, subject=None, student_inf=None
         )
         return link
 

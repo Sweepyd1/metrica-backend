@@ -4,7 +4,7 @@ from .base import BaseRepository
 
 class FileRepository(BaseRepository[File]):
     def __init__(self, session):
-        super().__init__(File, session)  # Добавлено
+        super().__init__(File, session)
 
     async def create(
         self, path: str, filename: str, type: str, uploaded_by: int

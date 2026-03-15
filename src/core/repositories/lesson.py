@@ -22,4 +22,6 @@ class LessonRepository(BaseRepository[Lesson]):
         lesson = Lesson(**kwargs)
         self.session.add(lesson)
         await self.session.flush()
+        await self.session.commit()  # ← добавить эту строку
+        await self.session.refresh(lesson)  # опционально
         return lesson
