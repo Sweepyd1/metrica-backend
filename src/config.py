@@ -65,8 +65,8 @@ class AppConfig(BaseModel):
 class SecurityConfig(BaseModel):
     jwt_secret_key: str = Field(default_factory=lambda: os.getenv("JWT_SECRET_KEY", ""))
     jwt_algorithm: str = "HS256"
-    access_token_expire_minutes: int = 30
-    refresh_token_expire_days: int = 7
+    access_token_expire_minutes: int = 3000
+    refresh_token_expire_days: int = 70
     bcrypt_rounds: int = 12
 
     @field_validator("jwt_secret_key")

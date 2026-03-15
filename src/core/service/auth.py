@@ -105,6 +105,16 @@ class AuthService:
         )
         return user
 
+    async def authenticate(self, email: str, password: str) -> Optional[User]:
+        # Поиск пользователя по email или username
+        user = await self.repo.get_by_email(email=email)
+
+        if not user or not self.verify_password(
+            password, hashed_password=user.password
+        ):
+            return None
+        return user
+
     async def login(self, login_data: UserLogin) -> dict:
         user = await self.repo.get_by_email(login_data.email)
         if not user:
@@ -152,3 +162,22 @@ class AuthService:
             "refresh_token": new_refresh_token,
             "token_type": "bearer",
         }
+
+    async def get_user_from_token(
+        self, token: str, token_type: str = "access"
+    ) -> Optional[User]:
+        try:
+            payload = jwt.decode(
+                token,
+                cfg.security.jwt_secret_key,
+                algorithms=[cfg.security.jwt_algorithm],
+            )
+            if payload.get("type") != token_type:
+                return None
+            user_id = payload.get("sub")
+            if user_id is None:
+                return None
+        except JWTError:
+            return None
+        user = await self.repo.get(id=int(user_id))
+        return user

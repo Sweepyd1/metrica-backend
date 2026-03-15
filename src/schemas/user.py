@@ -24,7 +24,6 @@ class UserLogin(BaseModel):
     password: str
 
 
-# ---------- Ответы ----------
 class UserOut(BaseModel):
     id: int
     email: EmailStr
