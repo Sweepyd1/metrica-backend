@@ -1,13 +1,13 @@
 from sqlalchemy import select, and_, desc
 from sqlalchemy.orm import selectinload
-from database.models import (
+from src.database.models import (
     LessonFile,
     Lesson,
     TutorStudent,
     LessonFileKind,
     SubmissionStatus,
 )
-from .base import BaseRepository
+from src.core.repositories.base import BaseRepository
 
 
 class LessonFileRepository(BaseRepository[LessonFile]):
@@ -54,3 +54,26 @@ class LessonFileRepository(BaseRepository[LessonFile]):
         )
         result = await self.session.execute(query)
         return result.scalar_one_or_none()
+
+    async def get_latest_submission_for_lesson(self, lesson_id: int):
+        query = (
+            select(LessonFile)
+            .where(
+                and_(
+                    LessonFile.lesson_id == lesson_id,
+                    LessonFile.kind == LessonFileKind.SUBMISSION,
+                )
+            )
+            .options(selectinload(LessonFile.file))
+            .order_by(desc(LessonFile.id))
+            .limit(1)
+        )
+        result = await self.session.execute(query)
+        return result.scalar_one_or_none()
+
+    async def save(self, lesson_file: LessonFile) -> LessonFile:
+        self.session.add(lesson_file)
+        await self.session.flush()
+        await self.session.commit()
+        await self.session.refresh(lesson_file)
+        return lesson_file

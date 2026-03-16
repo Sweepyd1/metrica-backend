@@ -1,25 +1,26 @@
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
-from typing import List
-import shutil
+import datetime as dt
 import os
+import shutil
+from typing import List
 
-from api.dependencies import get_current_tutor, get_db_session, get_tutor_service
-from core.service.tutor import TutorService
-from schemas.tutor import (
+from fastapi import APIRouter, Depends, File, Query, UploadFile
+
+from src.api.dependencies import get_current_tutor, get_db_session, get_tutor_service
+from src.core.service.tutor import TutorService
+from src.schemas.tutor import (
     StudentAdd,
     StudentOut,
     LessonCreate,
+    TutorLessonDetail,
+    TutorLessonListOut,
     LessonOut,
     SubmissionOut,
     SubmissionCheck,
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from database.models import User
-from core.repositories.file import (
-    FileRepository,
-)  # предположим, что есть репозиторий для File
-from database.db_manager import DatabaseManager
+from src.database.models import User
+from src.core.repositories.file import FileRepository
 
 router = APIRouter(prefix="/tutor", tags=["tutor"])
 
@@ -68,6 +69,29 @@ async def create_lesson(
         homework_done=lesson.homework_done,
         homework_deadline=lesson.homework_deadline,
     )
+
+
+@router.get("/lessons", response_model=TutorLessonListOut)
+async def list_lessons(
+    date_from: dt.date | None = Query(default=None),
+    date_to: dt.date | None = Query(default=None),
+    tutor: User = Depends(get_current_tutor),
+    service: TutorService = Depends(get_tutor_service),
+):
+    return await service.get_my_lessons(
+        tutor.id,
+        date_from=date_from,
+        date_to=date_to,
+    )
+
+
+@router.get("/lessons/{lesson_id}", response_model=TutorLessonDetail)
+async def lesson_detail(
+    lesson_id: int,
+    tutor: User = Depends(get_current_tutor),
+    service: TutorService = Depends(get_tutor_service),
+):
+    return await service.get_lesson_detail(tutor.id, lesson_id)
 
 
 @router.get("/submissions/pending", response_model=List[SubmissionOut])

@@ -1,6 +1,7 @@
-from pydantic import BaseModel
-from datetime import date, time
+import datetime as dt
 from typing import Optional, List
+
+from pydantic import BaseModel, Field
 
 
 class StudentAdd(BaseModel):
@@ -19,30 +20,63 @@ class StudentOut(BaseModel):
 
 class LessonCreate(BaseModel):
     tutor_student_id: int
-    date: date
-    time: time
+    date: dt.date
+    time: dt.time
     topic: str
     meet_link: Optional[str] = None
-    homework_deadline: Optional[date] = None
-    material_file_ids: List[int] = []  # ID загруженных файлов-материалов
-    homework_task_file_ids: List[int] = []  # ID файлов с заданием
+    homework_deadline: Optional[dt.date] = None
+    material_file_ids: List[int] = Field(default_factory=list)
+    homework_task_file_ids: List[int] = Field(default_factory=list)
 
 
 class LessonOut(BaseModel):
     id: int
     tutor_student_id: int
-    date: Optional[date]
-    time: Optional[time]
+    date: Optional[dt.date]
+    time: Optional[dt.time]
     topic: Optional[str]
     meet_link: Optional[str]
     homework_done: bool
-    homework_deadline: Optional[date]
+    homework_deadline: Optional[dt.date]
+
+
+class TutorLessonAttachmentOut(BaseModel):
+    id: int
+    filename: Optional[str] = None
+    file_url: Optional[str] = None
+    type: Optional[str] = None
+
+
+class TutorLessonSummary(BaseModel):
+    id: int
+    tutor_student_id: int
+    student_id: int
+    student_name: str
+    date: Optional[dt.date] = None
+    time: Optional[dt.time] = None
+    topic: Optional[str] = None
+    meet_link: Optional[str] = None
+    materials: List[TutorLessonAttachmentOut] = Field(default_factory=list)
+    homework_task_files: List[TutorLessonAttachmentOut] = Field(default_factory=list)
+    homework_deadline: Optional[dt.date] = None
+    homework_done: bool
+    homework_status: str
+
+
+class TutorLessonListOut(BaseModel):
+    upcoming: List[TutorLessonSummary]
+    past: List[TutorLessonSummary]
+
+
+class TutorLessonDetail(TutorLessonSummary):
+    submission_file: Optional[TutorLessonAttachmentOut] = None
+    submission_comment: Optional[str] = None
 
 
 class SubmissionOut(BaseModel):
     id: int
     student: str
-    lesson_date: Optional[date]
+    lesson_date: Optional[dt.date]
     lesson_topic: Optional[str]
     file_url: Optional[str]  # путь к файлу
     status: str  # "submitted" / "checked"

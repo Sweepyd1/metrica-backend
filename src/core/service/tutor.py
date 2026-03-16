@@ -1,19 +1,27 @@
-from fastapi import HTTPException, status
-from typing import List, Dict, Any
+from datetime import date, datetime, time
+from typing import Any, Dict, List
 
-from core.repositories.tutor_student import TutorStudentRepository
-from core.repositories.lesson import LessonRepository
-from core.repositories.lesson_file import LessonFileRepository
-from core.repositories.user import UserRepository
-from database.models import (
-    User,
+from fastapi import HTTPException, status
+
+from src.core.repositories.tutor_student import TutorStudentRepository
+from src.core.repositories.lesson import LessonRepository
+from src.core.repositories.lesson_file import LessonFileRepository
+from src.core.repositories.user import UserRepository
+from src.database.models import (
     TutorStudent,
     Lesson,
     LessonFile,
     SubmissionStatus,
     LessonFileKind,
 )
-from schemas.tutor import LessonCreate, SubmissionOut
+from src.schemas.tutor import (
+    LessonCreate,
+    SubmissionOut,
+    TutorLessonAttachmentOut,
+    TutorLessonDetail,
+    TutorLessonListOut,
+    TutorLessonSummary,
+)
 
 
 class TutorService:
@@ -105,6 +113,40 @@ class TutorService:
             )
         return lesson
 
+    async def get_my_lessons(
+        self,
+        tutor_id: int,
+        date_from: date | None = None,
+        date_to: date | None = None,
+    ) -> TutorLessonListOut:
+        lessons = await self.lesson_repo.get_by_tutor(
+            tutor_id, date_from=date_from, date_to=date_to
+        )
+        now = datetime.now()
+        upcoming: list[TutorLessonSummary] = []
+        past: list[TutorLessonSummary] = []
+
+        for lesson in lessons:
+            lesson_out = self._build_lesson_summary(lesson)
+            if self._is_upcoming(lesson, now):
+                upcoming.append(lesson_out)
+            else:
+                past.append(lesson_out)
+
+        upcoming.sort(key=self._lesson_sort_key)
+        past.sort(key=self._lesson_sort_key, reverse=True)
+        return TutorLessonListOut(upcoming=upcoming, past=past)
+
+    async def get_lesson_detail(
+        self, tutor_id: int, lesson_id: int
+    ) -> TutorLessonDetail:
+        lesson = await self.lesson_repo.get_tutor_lesson(tutor_id, lesson_id)
+        if not lesson:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Lesson not found"
+            )
+        return self._build_lesson_detail(lesson)
+
     async def get_pending_submissions(self, tutor_id: int) -> List[SubmissionOut]:
         submissions = await self.lesson_file_repo.get_pending_for_tutor(tutor_id)
         result = []
@@ -141,5 +183,95 @@ class TutorService:
             raise HTTPException(status_code=403, detail="Not your student")
         sub.status = SubmissionStatus.CHECKED
         sub.comment = comment
-        await self.lesson_file_repo.update(sub)
+        await self.lesson_file_repo.save(sub)
         return sub
+
+    def _build_lesson_summary(self, lesson: Lesson) -> TutorLessonSummary:
+        materials, homework_task_files, submission = self._split_lesson_files(lesson)
+        student = lesson.tutor_student.student
+        student_name = f"{student.first_name} {student.last_name or ''}".strip()
+        return TutorLessonSummary(
+            id=lesson.id,
+            tutor_student_id=lesson.tutor_student_id,
+            student_id=student.id,
+            student_name=student_name,
+            date=lesson.l_date,
+            time=lesson.l_time,
+            topic=lesson.topic,
+            meet_link=lesson.meet_link,
+            materials=[self._file_to_schema(item.file) for item in materials],
+            homework_task_files=[
+                self._file_to_schema(item.file) for item in homework_task_files
+            ],
+            homework_deadline=lesson.homework_deadline,
+            homework_done=lesson.homework_done,
+            homework_status=self._submission_status(submission),
+        )
+
+    def _build_lesson_detail(self, lesson: Lesson) -> TutorLessonDetail:
+        materials, homework_task_files, submission = self._split_lesson_files(lesson)
+        student = lesson.tutor_student.student
+        student_name = f"{student.first_name} {student.last_name or ''}".strip()
+        submission_file = self._file_to_schema(submission.file) if submission else None
+        return TutorLessonDetail(
+            id=lesson.id,
+            tutor_student_id=lesson.tutor_student_id,
+            student_id=student.id,
+            student_name=student_name,
+            date=lesson.l_date,
+            time=lesson.l_time,
+            topic=lesson.topic,
+            meet_link=lesson.meet_link,
+            materials=[self._file_to_schema(item.file) for item in materials],
+            homework_task_files=[
+                self._file_to_schema(item.file) for item in homework_task_files
+            ],
+            homework_deadline=lesson.homework_deadline,
+            homework_done=lesson.homework_done,
+            homework_status=self._submission_status(submission),
+            submission_file=submission_file,
+            submission_comment=submission.comment if submission else None,
+        )
+
+    def _split_lesson_files(
+        self, lesson: Lesson
+    ) -> tuple[list[LessonFile], list[LessonFile], LessonFile | None]:
+        materials: list[LessonFile] = []
+        homework_task_files: list[LessonFile] = []
+        submission: LessonFile | None = None
+
+        for lesson_file in sorted(lesson.lesson_files, key=lambda item: item.id):
+            if lesson_file.kind == LessonFileKind.MATERIAL:
+                materials.append(lesson_file)
+            elif lesson_file.kind == LessonFileKind.HOMEWORK_TASK:
+                homework_task_files.append(lesson_file)
+            elif lesson_file.kind == LessonFileKind.SUBMISSION:
+                submission = lesson_file
+
+        return materials, homework_task_files, submission
+
+    def _submission_status(self, submission: LessonFile | None) -> str:
+        if not submission or not submission.status:
+            return "not_submitted"
+        return submission.status.value
+
+    def _file_to_schema(self, file) -> TutorLessonAttachmentOut:
+        return TutorLessonAttachmentOut(
+            id=file.id,
+            filename=file.filename,
+            file_url=file.path,
+            type=file.type,
+        )
+
+    def _is_upcoming(self, lesson: Lesson, now: datetime) -> bool:
+        if lesson.l_date is None:
+            return False
+        lesson_time = lesson.l_time or time.min
+        return datetime.combine(lesson.l_date, lesson_time) >= now
+
+    def _lesson_sort_key(self, lesson: TutorLessonSummary):
+        return (
+            lesson.date or date.min,
+            lesson.time or time.min,
+            lesson.id,
+        )

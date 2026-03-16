@@ -1,8 +1,9 @@
 # src/core/repositories/user.py
 from sqlalchemy import select, or_
-from database.models import User
-from .base import BaseRepository
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.database.models import User
+from src.core.repositories.base import BaseRepository
 
 
 class UserRepository(BaseRepository[User]):

@@ -1,5 +1,8 @@
+import uvicorn
+
+
 def main():
-    print("Hello from metrica!")
+    uvicorn.run("src.main:app")
 
 
 if __name__ == "__main__":

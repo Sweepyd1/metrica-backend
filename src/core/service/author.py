@@ -1,7 +1,7 @@
 from fastapi import HTTPException
-from core.repositories.author import AuthorRepository
-from core.services.file_service import FileService
-from schemas.author import AuthorCreate, AuthorUpdate
+from src.core.repositories.author import AuthorRepository
+from src.core.services.file_service import FileService
+from src.schemas.author import AuthorCreate, AuthorUpdate
 
 class AuthorService:
     def __init__(self, repo: AuthorRepository, file_service: FileService):
