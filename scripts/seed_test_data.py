@@ -1,7 +1,14 @@
+import sys
+from pathlib import Path
 from datetime import date, datetime, time, timedelta
 
 from passlib.context import CryptContext
 from sqlalchemy import delete, text
+
+# Allow running the script directly from the project root on Windows/Python.
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.database.db_manager import db_manager
 from src.database.models import (

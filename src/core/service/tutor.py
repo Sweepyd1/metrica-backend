@@ -169,22 +169,23 @@ class TutorService:
     async def check_submission(
         self, tutor_id: int, submission_id: int, comment: str = None
     ) -> LessonFile:
-        sub = await self.lesson_file_repo.get(submission_id)
+        sub = await self.lesson_file_repo.get_submission_for_tutor(
+            tutor_id, submission_id
+        )
         if not sub or sub.kind != LessonFileKind.SUBMISSION:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Submission not found"
             )
         # проверка доступа
-        lesson = await self.lesson_repo.get(sub.lesson_id)
-        if not lesson:
-            raise HTTPException(status_code=404, detail="Lesson not found")
-        link = await self.tutor_student_repo.get(lesson.tutor_student_id)
-        if link.tutor_id != tutor_id:
-            raise HTTPException(status_code=403, detail="Not your student")
         sub.status = SubmissionStatus.CHECKED
         sub.comment = comment
         await self.lesson_file_repo.save(sub)
-        return sub
+        checked_submission = await self.lesson_file_repo.get_submission_for_tutor(
+            tutor_id, submission_id
+        )
+        if not checked_submission:
+            raise HTTPException(status_code=404, detail="Submission not found")
+        return checked_submission
 
     def _build_lesson_summary(self, lesson: Lesson) -> TutorLessonSummary:
         materials, homework_task_files, submission = self._split_lesson_files(lesson)

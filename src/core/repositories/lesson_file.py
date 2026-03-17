@@ -14,6 +14,28 @@ class LessonFileRepository(BaseRepository[LessonFile]):
     def __init__(self, session):
         super().__init__(LessonFile, session)  # Добавлено
 
+    async def get_submission_for_tutor(self, tutor_id: int, submission_id: int):
+        query = (
+            select(LessonFile)
+            .join(Lesson, LessonFile.lesson_id == Lesson.id)
+            .join(TutorStudent, Lesson.tutor_student_id == TutorStudent.id)
+            .where(
+                and_(
+                    TutorStudent.tutor_id == tutor_id,
+                    LessonFile.id == submission_id,
+                    LessonFile.kind == LessonFileKind.SUBMISSION,
+                )
+            )
+            .options(
+                selectinload(LessonFile.lesson)
+                .selectinload(Lesson.tutor_student)
+                .selectinload(TutorStudent.student),
+                selectinload(LessonFile.file),
+            )
+        )
+        result = await self.session.execute(query)
+        return result.scalar_one_or_none()
+
     async def get_pending_for_tutor(self, tutor_id: int):
         query = (
             select(LessonFile)
