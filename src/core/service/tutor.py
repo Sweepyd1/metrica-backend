@@ -16,6 +16,7 @@ from src.database.models import (
 )
 from src.schemas.tutor import (
     LessonCreate,
+    LessonUpdate,
     SubmissionOut,
     TutorLessonAttachmentOut,
     TutorLessonDetail,
@@ -112,6 +113,51 @@ class TutorService:
                 lesson_id=lesson.id, file_id=file_id, kind=LessonFileKind.HOMEWORK_TASK
             )
         return lesson
+
+    async def update_lesson(
+        self, tutor_id: int, lesson_id: int, data: LessonUpdate
+    ) -> Lesson:
+        lesson = await self.lesson_repo.get_tutor_lesson(tutor_id, lesson_id)
+        if not lesson:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Lesson not found"
+            )
+
+        link = await self.tutor_student_repo.get(data.tutor_student_id)
+        if not link or link.tutor_id != tutor_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Not your student"
+            )
+
+        lesson.tutor_student_id = data.tutor_student_id
+        lesson.l_date = data.date
+        lesson.l_time = data.time
+        lesson.topic = data.topic
+        lesson.meet_link = data.meet_link
+        lesson.homework_deadline = data.homework_deadline
+
+        await self.lesson_file_repo.sync_lesson_files(
+            lesson,
+            material_file_ids=data.material_file_ids,
+            homework_task_file_ids=data.homework_task_file_ids,
+        )
+        await self.lesson_repo.save(lesson)
+
+        updated_lesson = await self.lesson_repo.get_tutor_lesson(tutor_id, lesson_id)
+        if not updated_lesson:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Lesson not found"
+            )
+        return updated_lesson
+
+    async def delete_lesson(self, tutor_id: int, lesson_id: int) -> None:
+        lesson = await self.lesson_repo.get_tutor_lesson(tutor_id, lesson_id)
+        if not lesson:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Lesson not found"
+            )
+
+        await self.lesson_repo.delete(lesson.id)
 
     async def get_my_lessons(
         self,
