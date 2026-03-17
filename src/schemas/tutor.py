@@ -29,6 +29,10 @@ class LessonCreate(BaseModel):
     homework_task_file_ids: List[int] = Field(default_factory=list)
 
 
+class LessonUpdate(LessonCreate):
+    pass
+
+
 class LessonOut(BaseModel):
     id: int
     tutor_student_id: int

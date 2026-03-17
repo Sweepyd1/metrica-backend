@@ -99,3 +99,48 @@ class LessonFileRepository(BaseRepository[LessonFile]):
         await self.session.commit()
         await self.session.refresh(lesson_file)
         return lesson_file
+
+    async def sync_lesson_files(
+        self,
+        lesson: Lesson,
+        *,
+        material_file_ids: list[int],
+        homework_task_file_ids: list[int],
+    ) -> None:
+        desired_by_file_id: dict[int, LessonFileKind] = {}
+
+        for file_id in material_file_ids:
+            if file_id > 0 and file_id not in desired_by_file_id:
+                desired_by_file_id[file_id] = LessonFileKind.MATERIAL
+
+        for file_id in homework_task_file_ids:
+            if file_id > 0 and file_id not in desired_by_file_id:
+                desired_by_file_id[file_id] = LessonFileKind.HOMEWORK_TASK
+
+        current_files = [
+            lesson_file
+            for lesson_file in lesson.lesson_files
+            if lesson_file.kind != LessonFileKind.SUBMISSION
+        ]
+
+        for lesson_file in current_files:
+            desired_kind = desired_by_file_id.pop(lesson_file.file_id, None)
+
+            if desired_kind is None:
+                await self.session.delete(lesson_file)
+                continue
+
+            if lesson_file.kind != desired_kind:
+                lesson_file.kind = desired_kind
+                self.session.add(lesson_file)
+
+        for file_id, kind in desired_by_file_id.items():
+            self.session.add(
+                LessonFile(
+                    lesson_id=lesson.id,
+                    file_id=file_id,
+                    kind=kind,
+                )
+            )
+
+        await self.session.flush()
