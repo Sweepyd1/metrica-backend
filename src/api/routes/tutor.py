@@ -5,9 +5,9 @@ from typing import List
 
 from fastapi import APIRouter, Depends, File, Query, UploadFile, status
 
-from src.api.dependencies import get_current_tutor, get_db_session, get_tutor_service
-from src.core.service.tutor import TutorService
-from src.schemas.tutor import (
+from api.dependencies import get_current_tutor, get_db_session, get_tutor_service
+from core.service.tutor import TutorService
+from schemas.tutor import (
     StudentAdd,
     StudentOut,
     LessonCreate,
@@ -20,8 +20,8 @@ from src.schemas.tutor import (
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.database.models import User
-from src.core.repositories.file import FileRepository
+from database.models import User
+from core.repositories.file import FileRepository
 
 router = APIRouter(prefix="/tutor", tags=["tutor"])
 

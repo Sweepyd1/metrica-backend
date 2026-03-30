@@ -2,11 +2,11 @@ from datetime import date, datetime, time
 
 from fastapi import HTTPException, status
 
-from src.core.repositories.file import FileRepository
-from src.core.repositories.lesson import LessonRepository
-from src.core.repositories.lesson_file import LessonFileRepository
-from src.database.models import Lesson, LessonFile, LessonFileKind, SubmissionStatus
-from src.schemas.student import (
+from core.repositories.file import FileRepository
+from core.repositories.lesson import LessonRepository
+from core.repositories.lesson_file import LessonFileRepository
+from database.models import Lesson, LessonFile, LessonFileKind, SubmissionStatus
+from schemas.student import (
     HomeworkSubmissionOut,
     LessonAttachmentOut,
     StudentLessonDetail,

@@ -6,7 +6,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from typing import TYPE_CHECKING
 
-from src.config import cfg
+from config import cfg
 
 
 class DatabaseManager:

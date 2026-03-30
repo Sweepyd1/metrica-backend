@@ -1,5 +1,5 @@
-from src.database.models import File
-from src.core.repositories.base import BaseRepository
+from database.models import File
+from core.repositories.base import BaseRepository
 
 
 class FileRepository(BaseRepository[File]):

@@ -3,18 +3,18 @@ from typing import Any, Dict, List
 
 from fastapi import HTTPException, status
 
-from src.core.repositories.tutor_student import TutorStudentRepository
-from src.core.repositories.lesson import LessonRepository
-from src.core.repositories.lesson_file import LessonFileRepository
-from src.core.repositories.user import UserRepository
-from src.database.models import (
+from core.repositories.tutor_student import TutorStudentRepository
+from core.repositories.lesson import LessonRepository
+from core.repositories.lesson_file import LessonFileRepository
+from core.repositories.user import UserRepository
+from database.models import (
     TutorStudent,
     Lesson,
     LessonFile,
     SubmissionStatus,
     LessonFileKind,
 )
-from src.schemas.tutor import (
+from schemas.tutor import (
     LessonCreate,
     LessonUpdate,
     SubmissionOut,

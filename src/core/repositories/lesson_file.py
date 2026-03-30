@@ -1,13 +1,13 @@
 from sqlalchemy import select, and_, desc
 from sqlalchemy.orm import selectinload
-from src.database.models import (
+from database.models import (
     LessonFile,
     Lesson,
     TutorStudent,
     LessonFileKind,
     SubmissionStatus,
 )
-from src.core.repositories.base import BaseRepository
+from core.repositories.base import BaseRepository
 
 
 class LessonFileRepository(BaseRepository[LessonFile]):

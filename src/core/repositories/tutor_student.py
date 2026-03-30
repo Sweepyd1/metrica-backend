@@ -1,7 +1,7 @@
 from sqlalchemy import select, and_
 from sqlalchemy.orm import selectinload
-from src.database.models import TutorStudent
-from src.core.repositories.base import BaseRepository
+from database.models import TutorStudent
+from core.repositories.base import BaseRepository
 
 
 class TutorStudentRepository(BaseRepository[TutorStudent]):

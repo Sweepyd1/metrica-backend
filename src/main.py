@@ -3,7 +3,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 import uvicorn
-from src.api.routes import auth, student, tutor
+from api.routes import auth, student, tutor
 
 app = FastAPI()
 app.include_router(auth.router)
@@ -16,4 +16,4 @@ app.mount("/uploads", StaticFiles(directory=uploads_dir), name="uploads")
 
 
 if __name__ == "__main__":
-    uvicorn.run("src.main:app")
+    uvicorn.run("main:app")

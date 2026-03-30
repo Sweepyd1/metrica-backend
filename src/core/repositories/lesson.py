@@ -2,8 +2,8 @@ import datetime as dt
 
 from sqlalchemy import and_, desc, select
 from sqlalchemy.orm import selectinload
-from src.database.models import Lesson, LessonFile, TutorStudent
-from src.core.repositories.base import BaseRepository
+from database.models import Lesson, LessonFile, TutorStudent
+from core.repositories.base import BaseRepository
 
 
 class LessonRepository(BaseRepository[Lesson]):
@@ -74,7 +74,9 @@ class LessonRepository(BaseRepository[Lesson]):
             query = query.where(Lesson.l_date >= date_from)
         if date_to is not None:
             query = query.where(Lesson.l_date <= date_to)
-        query = query.order_by(desc(Lesson.l_date), desc(Lesson.l_time), desc(Lesson.id))
+        query = query.order_by(
+            desc(Lesson.l_date), desc(Lesson.l_time), desc(Lesson.id)
+        )
         result = await self.session.execute(query)
         return result.scalars().all()
 

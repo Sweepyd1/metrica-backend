@@ -5,10 +5,10 @@ from jose import jwt, JWTError
 from passlib.context import CryptContext
 from fastapi import HTTPException, status
 
-from src.database.models import User
-from src.config import cfg
-from src.core.repositories.user import UserRepository
-from src.schemas.user import UserCreate, UserLogin, TokenPayload
+from database.models import User
+from config import cfg
+from core.repositories.user import UserRepository
+from schemas.user import UserCreate, UserLogin, TokenPayload
 
 # Настройка хеширования паролей
 pwd_context = CryptContext(

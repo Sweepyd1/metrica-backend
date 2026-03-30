@@ -10,8 +10,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.database.db_manager import db_manager
-from src.database.models import (
+from database.db_manager import db_manager
+from database.models import (
     File,
     Lesson,
     LessonFile,
@@ -29,7 +29,9 @@ pwd_context = CryptContext(schemes=["argon2", "bcrypt"], deprecated="auto")
 async def reseed() -> None:
     async with db_manager.get_session() as session:
         # Remove only the fixed demo rows so the script can be re-run safely.
-        await session.execute(delete(LessonFile).where(LessonFile.id.in_([1, 2, 3, 4, 5])))
+        await session.execute(
+            delete(LessonFile).where(LessonFile.id.in_([1, 2, 3, 4, 5]))
+        )
         await session.execute(delete(Lesson).where(Lesson.id.in_([1, 2, 3])))
         await session.execute(delete(File).where(File.id.in_([1, 2, 3, 4, 5])))
         await session.execute(delete(TutorStudent).where(TutorStudent.id == 1))

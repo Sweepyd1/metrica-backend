@@ -4,10 +4,10 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 
-from src.api.dependencies import get_current_student, get_student_service
-from src.core.service.student import StudentService
-from src.database.models import User
-from src.schemas.student import (
+from api.dependencies import get_current_student, get_student_service
+from core.service.student import StudentService
+from database.models import User
+from schemas.student import (
     HomeworkSubmissionOut,
     StudentLessonDetail,
     StudentLessonListOut,
