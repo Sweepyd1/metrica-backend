@@ -5,6 +5,7 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.repositories.file import FileRepository
+from src.core.repositories.group import GroupRepository
 from src.core.repositories.lesson import LessonRepository
 from src.core.repositories.lesson_file import LessonFileRepository
 from src.core.repositories.star_transaction import StarTransactionRepository
@@ -74,6 +75,7 @@ async def get_tutor_service(db: AsyncSession = Depends(get_db_session)) -> Tutor
         star_transaction_repo=StarTransactionRepository(db),
         user_repo=UserRepository(db),
         session=db,
+        group_repo=GroupRepository(db),
     )
 
 

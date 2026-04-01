@@ -70,6 +70,9 @@ class User(Base):
         cascade="all, delete-orphan",
     )
     uploaded_files: Mapped[List["File"]] = relationship(back_populates="uploader")
+    groups: Mapped[List["Group"]] = relationship(
+        secondary="group_student", back_populates="students"
+    )
 
 
 class TutorStudent(Base):
@@ -176,6 +179,43 @@ class LessonFile(Base):
 
     lesson: Mapped["Lesson"] = relationship(back_populates="lesson_files")
     file: Mapped["File"] = relationship(back_populates="lesson_links")
+
+
+class Group(Base):
+    __tablename__ = "groups"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    tutor_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP, server_default=func.now(), default=datetime.now
+    )
+
+    tutor: Mapped["User"] = relationship(foreign_keys=[tutor_id])
+    students: Mapped[List["User"]] = relationship(
+        secondary="group_student", back_populates="groups"
+    )
+
+
+class GroupStudent(Base):
+    __tablename__ = "group_student"
+    __table_args__ = (
+        UniqueConstraint("group_id", "student_id", name="uq_group_student"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    group_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("groups.id", ondelete="CASCADE"), nullable=False
+    )
+    student_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+
+    group: Mapped["Group"] = relationship()
+    student: Mapped["User"] = relationship()
 
 
 class StarTransaction(Base):
