@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, File, Query, UploadFile, status
 
 from api.dependencies import get_current_tutor, get_db_session, get_tutor_service
 from core.service.tutor import TutorService
+from schemas.group import GroupCreate, GroupDetailOut, GroupOut, GroupStudentsUpdate
 from schemas.tutor import (
     StudentAdd,
     StudentOut,
@@ -170,3 +171,57 @@ async def upload_file(
         uploaded_by=tutor.id,
     )
     return {"file_id": db_file.id}
+
+@router.post("/groups", response_model=GroupOut)
+async def create_group(
+    data: GroupCreate,
+    tutor: User = Depends(get_current_tutor),
+    service: TutorService = Depends(get_tutor_service),
+):
+    return await service.create_group(tutor.id, data)
+
+
+@router.get("/groups", response_model=List[GroupOut])
+async def list_groups(
+    tutor: User = Depends(get_current_tutor),
+    service: TutorService = Depends(get_tutor_service),
+):
+    return await service.get_my_groups(tutor.id)
+
+
+@router.get("/groups/{group_id}", response_model=GroupDetailOut)
+async def get_group(
+    group_id: int,
+    tutor: User = Depends(get_current_tutor),
+    service: TutorService = Depends(get_tutor_service),
+):
+    return await service.get_group_detail(tutor.id, group_id)
+
+
+@router.delete("/groups/{group_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_group(
+    group_id: int,
+    tutor: User = Depends(get_current_tutor),
+    service: TutorService = Depends(get_tutor_service),
+):
+    await service.delete_group(tutor.id, group_id)
+
+
+@router.post("/groups/{group_id}/students", response_model=GroupDetailOut)
+async def add_students_to_group(
+    group_id: int,
+    data: GroupStudentsUpdate,
+    tutor: User = Depends(get_current_tutor),
+    service: TutorService = Depends(get_tutor_service),
+):
+    return await service.add_students_to_group(tutor.id, group_id, data.student_ids)
+
+
+@router.delete("/groups/{group_id}/students", response_model=GroupDetailOut)
+async def remove_students_from_group(
+    group_id: int,
+    data: GroupStudentsUpdate,
+    tutor: User = Depends(get_current_tutor),
+    service: TutorService = Depends(get_tutor_service),
+):
+    return await service.remove_students_from_group(tutor.id, group_id, data.student_ids)

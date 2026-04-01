@@ -1,3 +1,4 @@
+from typing import List
 from sqlalchemy import select, and_
 from sqlalchemy.orm import selectinload
 from database.models import TutorStudent
@@ -50,3 +51,15 @@ class TutorStudentRepository(BaseRepository[TutorStudent]):
             .options(selectinload(TutorStudent.student))
         )
         return result.scalar_one()
+    async def get_valid_student_ids(self, tutor_id: int, student_ids: List[int]) -> List[int]:
+        """
+        Возвращает список student_id из переданных, которые реально связаны с данным репетитором.
+        """
+        result = await self.session.execute(
+            select(TutorStudent.student_id)
+            .where(
+                TutorStudent.tutor_id == tutor_id,
+                TutorStudent.student_id.in_(student_ids)
+            )
+        )
+        return result.scalars().all()

@@ -1,6 +1,7 @@
 from datetime import date, datetime, time
 from typing import Any, Dict, List
 
+from core.repositories.group import GroupRepository
 from fastapi import HTTPException, status
 
 from core.repositories.tutor_student import TutorStudentRepository
@@ -14,6 +15,7 @@ from database.models import (
     SubmissionStatus,
     LessonFileKind,
 )
+from schemas.group import GroupCreate, GroupDetailOut, GroupOut, StudentBasicOut
 from schemas.tutor import (
     LessonCreate,
     LessonUpdate,
@@ -32,11 +34,14 @@ class TutorService:
         lesson_repo: LessonRepository,
         lesson_file_repo: LessonFileRepository,
         user_repo: UserRepository,
+        group_repo: GroupRepository
     ):
         self.tutor_student_repo = tutor_student_repo
         self.lesson_repo = lesson_repo
         self.lesson_file_repo = lesson_file_repo
         self.user_repo = user_repo
+        self.group_repo = group_repo
+        
 
     async def add_student(self, tutor_id: int, email: str) -> TutorStudent:
         student = await self.user_repo.get_by_email(email)
@@ -232,6 +237,106 @@ class TutorService:
         if not checked_submission:
             raise HTTPException(status_code=404, detail="Submission not found")
         return checked_submission
+    async def create_group(self, tutor_id: int, data: GroupCreate) -> GroupOut:
+        if data.student_ids:
+            valid_student_ids = await self._validate_students_ownership(tutor_id, data.student_ids)
+            if set(valid_student_ids) != set(data.student_ids):
+                raise HTTPException(status_code=404,detail="One or more students do not belong to you")
+
+        group = await self.group_repo.create(
+            tutor_id=tutor_id,
+            name=data.name,
+            description=data.description,
+        )
+        if data.student_ids:
+            await self.group_repo.add_students(group.id, data.student_ids)
+
+        
+
+        # получаем количество студентов
+        student_count = await self.group_repo.count_students(group.id)
+
+        return GroupOut(
+            id=group.id,
+            name=group.name,
+            description=group.description,
+            student_count=student_count,
+            created_at=group.created_at,
+        )
+
+    async def get_my_groups(self, tutor_id: int) -> List[GroupOut]:
+        groups = await self.group_repo.get_by_tutor(tutor_id)
+        result = []
+        for g in groups:
+            count = await self.group_repo.count_students(g.id)
+            result.append(GroupOut(
+                id=g.id,
+                name=g.name,
+                description=g.description,
+                student_count=count,
+                created_at=g.created_at,
+            ))
+        return result
+
+    async def get_group_detail(self, tutor_id: int, group_id: int) -> GroupDetailOut:
+        group = await self.group_repo.get_by_id(group_id, tutor_id)
+        if not group:
+            raise HTTPException(status_code=404,detail="Group not found or not owned by you")
+
+        students = await self.group_repo.get_students(group_id)
+        student_out = [
+            StudentBasicOut(
+                id=s.id,
+                full_name=f"{s.first_name} {s.last_name or ''}".strip()
+            )
+            for s in students
+        ]
+
+        return GroupDetailOut(
+            id=group.id,
+            name=group.name,
+            description=group.description,
+            student_count=len(student_out),
+            created_at=group.created_at,
+            students=student_out,
+        )
+
+    async def delete_group(self, tutor_id: int, group_id: int) -> None:
+        group = await self.group_repo.get_by_id(group_id, tutor_id)
+        if not group:
+            raise HTTPException(status_code=404,detail="Group not found or not owned by you")
+        await self.group_repo.delete(group_id)
+        
+
+    async def add_students_to_group(
+        self, tutor_id: int, group_id: int, student_ids: List[int]
+    ) -> GroupDetailOut:
+        group = await self.group_repo.get_by_id(group_id, tutor_id)
+        if not group:
+            raise HTTPException(status_code=404,detail="Group not found or not owned by you")
+
+        valid_ids = await self._validate_students_ownership(tutor_id, student_ids)
+        if not valid_ids:
+            raise HTTPException(status_code=404,detail="None of the students belong to you")
+
+        await self.group_repo.add_students(group_id, valid_ids)
+        
+        return await self.get_group_detail(tutor_id, group_id)
+
+    async def remove_students_from_group(
+        self, tutor_id: int, group_id: int, student_ids: List[int]
+    ) -> GroupDetailOut:
+        group = await self.group_repo.get_by_id(group_id, tutor_id)
+        if not group:
+            raise HTTPException(status_code=404,detail="Group not found or not owned by you")
+        await self.group_repo.remove_students(group_id, student_ids)
+        
+        return await self.get_group_detail(tutor_id, group_id)
+
+    async def _validate_students_ownership(self, tutor_id: int, student_ids: List[int]) -> List[int]:
+        # Этот метод может остаться в сервисе, но он использует репозиторий TutorStudentRepository
+        return await self.tutor_student_repo.get_valid_student_ids(tutor_id, student_ids)
+    
 
     def _build_lesson_summary(self, lesson: Lesson) -> TutorLessonSummary:
         materials, homework_task_files, submission = self._split_lesson_files(lesson)
