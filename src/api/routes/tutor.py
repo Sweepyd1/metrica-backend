@@ -12,8 +12,12 @@ from src.schemas.tutor import (
     StudentOut,
     LessonCreate,
     LessonUpdate,
+    StarTransactionCreate,
+    StarTransactionOut,
     TutorLessonDetail,
     TutorLessonListOut,
+    TutorLessonProgressTreeOut,
+    TutorStudentStarsOut,
     LessonOut,
     SubmissionOut,
     SubmissionCheck,
@@ -53,6 +57,7 @@ async def add_student(
         full_name=f"{student.first_name} {student.last_name or ''}",
         subject=link.subject,
         class_info=link.student_inf,
+        star_balance=link.star_balance,
         last_submission_id=None,
         last_submission_status="none",
     )
@@ -64,6 +69,61 @@ async def list_students(
     service: TutorService = Depends(get_tutor_service),
 ):
     return await service.get_my_students(tutor.id)
+
+
+@router.get(
+    "/students/{tutor_student_id}/progress-tree",
+    response_model=TutorLessonProgressTreeOut,
+)
+async def student_progress_tree(
+    tutor_student_id: int,
+    tutor: User = Depends(get_current_tutor),
+    service: TutorService = Depends(get_tutor_service),
+):
+    return await service.get_student_progress_tree(tutor.id, tutor_student_id)
+
+
+@router.get(
+    "/students/{tutor_student_id}/stars",
+    response_model=TutorStudentStarsOut,
+)
+async def student_stars(
+    tutor_student_id: int,
+    limit: int = Query(default=50, ge=1, le=200),
+    tutor: User = Depends(get_current_tutor),
+    service: TutorService = Depends(get_tutor_service),
+):
+    return await service.get_student_stars(
+        tutor.id, tutor_student_id=tutor_student_id, limit=limit
+    )
+
+
+@router.post(
+    "/students/{tutor_student_id}/stars/accrue",
+    response_model=StarTransactionOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def accrue_student_stars(
+    tutor_student_id: int,
+    data: StarTransactionCreate,
+    tutor: User = Depends(get_current_tutor),
+    service: TutorService = Depends(get_tutor_service),
+):
+    return await service.accrue_stars(tutor.id, tutor_student_id, data)
+
+
+@router.post(
+    "/students/{tutor_student_id}/stars/write-off",
+    response_model=StarTransactionOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def write_off_student_stars(
+    tutor_student_id: int,
+    data: StarTransactionCreate,
+    tutor: User = Depends(get_current_tutor),
+    service: TutorService = Depends(get_tutor_service),
+):
+    return await service.write_off_stars(tutor.id, tutor_student_id, data)
 
 
 @router.post("/lessons", response_model=LessonOut)

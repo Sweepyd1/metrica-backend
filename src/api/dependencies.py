@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.core.repositories.file import FileRepository
 from src.core.repositories.lesson import LessonRepository
 from src.core.repositories.lesson_file import LessonFileRepository
+from src.core.repositories.star_transaction import StarTransactionRepository
 from src.core.repositories.tutor_student import TutorStudentRepository
 from src.core.repositories.user import UserRepository
 from src.core.service.auth import AuthService
@@ -70,7 +71,9 @@ async def get_tutor_service(db: AsyncSession = Depends(get_db_session)) -> Tutor
         tutor_student_repo=TutorStudentRepository(db),
         lesson_repo=LessonRepository(db),
         lesson_file_repo=LessonFileRepository(db),
+        star_transaction_repo=StarTransactionRepository(db),
         user_repo=UserRepository(db),
+        session=db,
     )
 
 

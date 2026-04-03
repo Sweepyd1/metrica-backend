@@ -1,6 +1,6 @@
 import datetime as dt
 
-from sqlalchemy import and_, desc, select
+from sqlalchemy import and_, asc, desc, nullslast, select
 from sqlalchemy.orm import selectinload
 from src.database.models import Lesson, LessonFile, TutorStudent
 from src.core.repositories.base import BaseRepository
@@ -77,6 +77,46 @@ class LessonRepository(BaseRepository[Lesson]):
         query = query.order_by(desc(Lesson.l_date), desc(Lesson.l_time), desc(Lesson.id))
         result = await self.session.execute(query)
         return result.scalars().all()
+
+    async def get_by_tutor_student(self, tutor_id: int, tutor_student_id: int):
+        query = (
+            select(Lesson)
+            .join(TutorStudent, Lesson.tutor_student_id == TutorStudent.id)
+            .where(
+                and_(
+                    TutorStudent.tutor_id == tutor_id,
+                    Lesson.tutor_student_id == tutor_student_id,
+                )
+            )
+            .options(
+                selectinload(Lesson.tutor_student).selectinload(TutorStudent.student),
+                selectinload(Lesson.lesson_files).selectinload(LessonFile.file),
+            )
+            .order_by(
+                nullslast(asc(Lesson.l_date)),
+                nullslast(asc(Lesson.l_time)),
+                asc(Lesson.id),
+            )
+        )
+        result = await self.session.execute(query)
+        return result.scalars().all()
+
+    async def get_tutor_student_lesson(
+        self, tutor_id: int, tutor_student_id: int, lesson_id: int
+    ):
+        query = (
+            select(Lesson)
+            .join(TutorStudent, Lesson.tutor_student_id == TutorStudent.id)
+            .where(
+                and_(
+                    TutorStudent.tutor_id == tutor_id,
+                    Lesson.tutor_student_id == tutor_student_id,
+                    Lesson.id == lesson_id,
+                )
+            )
+        )
+        result = await self.session.execute(query)
+        return result.scalar_one_or_none()
 
     async def get_tutor_lesson(self, tutor_id: int, lesson_id: int):
         query = (

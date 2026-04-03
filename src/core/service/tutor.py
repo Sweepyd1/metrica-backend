@@ -2,25 +2,34 @@ from datetime import date, datetime, time
 from typing import Any, Dict, List
 
 from fastapi import HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.repositories.tutor_student import TutorStudentRepository
 from src.core.repositories.lesson import LessonRepository
 from src.core.repositories.lesson_file import LessonFileRepository
+from src.core.repositories.star_transaction import StarTransactionRepository
 from src.core.repositories.user import UserRepository
 from src.database.models import (
     TutorStudent,
     Lesson,
     LessonFile,
+    StarTransaction,
+    StarTransactionType,
     SubmissionStatus,
     LessonFileKind,
 )
 from src.schemas.tutor import (
     LessonCreate,
     LessonUpdate,
+    StarTransactionCreate,
+    StarTransactionOut,
     SubmissionOut,
     TutorLessonAttachmentOut,
     TutorLessonDetail,
     TutorLessonListOut,
+    TutorLessonProgressItem,
+    TutorLessonProgressTreeOut,
+    TutorStudentStarsOut,
     TutorLessonSummary,
 )
 
@@ -31,12 +40,16 @@ class TutorService:
         tutor_student_repo: TutorStudentRepository,
         lesson_repo: LessonRepository,
         lesson_file_repo: LessonFileRepository,
+        star_transaction_repo: StarTransactionRepository,
         user_repo: UserRepository,
+        session: AsyncSession,
     ):
         self.tutor_student_repo = tutor_student_repo
         self.lesson_repo = lesson_repo
         self.lesson_file_repo = lesson_file_repo
+        self.star_transaction_repo = star_transaction_repo
         self.user_repo = user_repo
+        self.session = session
 
     async def add_student(self, tutor_id: int, email: str) -> TutorStudent:
         student = await self.user_repo.get_by_email(email)
@@ -81,11 +94,53 @@ class TutorService:
                     "full_name": f"{student.first_name} {student.last_name or ''}",
                     "subject": link.subject,
                     "class_info": link.student_inf,
+                    "star_balance": link.star_balance,
                     "last_submission_id": sub_id,
                     "last_submission_status": status_str,
                 }
             )
         return result
+
+    async def get_student_stars(
+        self, tutor_id: int, tutor_student_id: int, limit: int = 50
+    ) -> TutorStudentStarsOut:
+        link = await self.tutor_student_repo.get_for_tutor(tutor_id, tutor_student_id)
+        if not link:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Student link not found",
+            )
+
+        transactions = await self.star_transaction_repo.get_by_tutor_student(
+            tutor_id, tutor_student_id, limit=limit
+        )
+        return self._build_student_stars_out(link, transactions)
+
+    async def accrue_stars(
+        self,
+        tutor_id: int,
+        tutor_student_id: int,
+        data: StarTransactionCreate,
+    ) -> StarTransactionOut:
+        return await self._create_star_transaction(
+            tutor_id=tutor_id,
+            tutor_student_id=tutor_student_id,
+            data=data,
+            transaction_type=StarTransactionType.ACCRUAL,
+        )
+
+    async def write_off_stars(
+        self,
+        tutor_id: int,
+        tutor_student_id: int,
+        data: StarTransactionCreate,
+    ) -> StarTransactionOut:
+        return await self._create_star_transaction(
+            tutor_id=tutor_id,
+            tutor_student_id=tutor_student_id,
+            data=data,
+            transaction_type=StarTransactionType.WRITE_OFF,
+        )
 
     async def create_lesson(self, tutor_id: int, data: LessonCreate) -> Lesson:
         # проверяем, что связь принадлежит этому репетитору
@@ -182,6 +237,55 @@ class TutorService:
         upcoming.sort(key=self._lesson_sort_key)
         past.sort(key=self._lesson_sort_key, reverse=True)
         return TutorLessonListOut(upcoming=upcoming, past=past)
+
+    async def get_student_progress_tree(
+        self, tutor_id: int, tutor_student_id: int
+    ) -> TutorLessonProgressTreeOut:
+        link = await self.tutor_student_repo.get_for_tutor(tutor_id, tutor_student_id)
+        if not link:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Student link not found",
+            )
+
+        lessons = await self.lesson_repo.get_by_tutor_student(tutor_id, tutor_student_id)
+        now = datetime.now()
+        completed_lessons = 0
+        upcoming_lessons = 0
+        unscheduled_lessons = 0
+        items: list[TutorLessonProgressItem] = []
+
+        for sequence_number, lesson in enumerate(lessons, start=1):
+            progress_status = self._progress_status(lesson, now)
+            if progress_status == "completed":
+                completed_lessons += 1
+            elif progress_status == "upcoming":
+                upcoming_lessons += 1
+            else:
+                unscheduled_lessons += 1
+
+            items.append(
+                self._build_lesson_progress_item(
+                    lesson,
+                    sequence_number=sequence_number,
+                    progress_status=progress_status,
+                )
+            )
+
+        student = link.student
+        student_name = f"{student.first_name} {student.last_name or ''}".strip()
+        return TutorLessonProgressTreeOut(
+            tutor_student_id=link.id,
+            student_id=student.id,
+            student_name=student_name,
+            subject=link.subject,
+            class_info=link.student_inf,
+            total_lessons=len(items),
+            completed_lessons=completed_lessons,
+            upcoming_lessons=upcoming_lessons,
+            unscheduled_lessons=unscheduled_lessons,
+            items=items,
+        )
 
     async def get_lesson_detail(
         self, tutor_id: int, lesson_id: int
@@ -280,6 +384,54 @@ class TutorService:
             submission_comment=submission.comment if submission else None,
         )
 
+    def _build_lesson_progress_item(
+        self,
+        lesson: Lesson,
+        *,
+        sequence_number: int,
+        progress_status: str,
+    ) -> TutorLessonProgressItem:
+        materials, homework_task_files, submission = self._split_lesson_files(lesson)
+        submission_file = self._file_to_schema(submission.file) if submission else None
+        return TutorLessonProgressItem(
+            id=lesson.id,
+            sequence_number=sequence_number,
+            progress_status=progress_status,
+            date=lesson.l_date,
+            time=lesson.l_time,
+            topic=lesson.topic,
+            meet_link=lesson.meet_link,
+            materials=[self._file_to_schema(item.file) for item in materials],
+            homework_task_files=[
+                self._file_to_schema(item.file) for item in homework_task_files
+            ],
+            homework_deadline=lesson.homework_deadline,
+            homework_done=lesson.homework_done,
+            homework_status=self._submission_status(submission),
+            submission_file=submission_file,
+            submission_comment=submission.comment if submission else None,
+        )
+
+    def _build_student_stars_out(
+        self,
+        link: TutorStudent,
+        transactions: list[StarTransaction],
+    ) -> TutorStudentStarsOut:
+        student = link.student
+        student_name = f"{student.first_name} {student.last_name or ''}".strip()
+        return TutorStudentStarsOut(
+            tutor_student_id=link.id,
+            student_id=student.id,
+            student_name=student_name,
+            subject=link.subject,
+            class_info=link.student_inf,
+            star_balance=link.star_balance,
+            transactions=[
+                self._star_transaction_to_schema(link, transaction)
+                for transaction in transactions
+            ],
+        )
+
     def _split_lesson_files(
         self, lesson: Lesson
     ) -> tuple[list[LessonFile], list[LessonFile], LessonFile | None]:
@@ -309,6 +461,100 @@ class TutorService:
             file_url=file.path,
             type=file.type,
         )
+
+    def _star_transaction_to_schema(
+        self,
+        link: TutorStudent,
+        transaction: StarTransaction,
+        *,
+        lesson: Lesson | None = None,
+    ) -> StarTransactionOut:
+        student = link.student
+        student_name = f"{student.first_name} {student.last_name or ''}".strip()
+        related_lesson = lesson or transaction.lesson
+        return StarTransactionOut(
+            id=transaction.id,
+            tutor_student_id=link.id,
+            student_id=student.id,
+            student_name=student_name,
+            lesson_id=related_lesson.id if related_lesson else None,
+            lesson_topic=related_lesson.topic if related_lesson else None,
+            lesson_date=related_lesson.l_date if related_lesson else None,
+            delta=transaction.delta,
+            balance_after=transaction.balance_after,
+            transaction_type=transaction.transaction_type.value,
+            reason=transaction.reason,
+            created_at=transaction.created_at,
+        )
+
+    async def _create_star_transaction(
+        self,
+        *,
+        tutor_id: int,
+        tutor_student_id: int,
+        data: StarTransactionCreate,
+        transaction_type: StarTransactionType,
+    ) -> StarTransactionOut:
+        try:
+            link = await self.tutor_student_repo.get_for_tutor(
+                tutor_id, tutor_student_id, for_update=True
+            )
+            if not link:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Student link not found",
+                )
+
+            lesson = None
+            if data.lesson_id is not None:
+                lesson = await self.lesson_repo.get_tutor_student_lesson(
+                    tutor_id, tutor_student_id, data.lesson_id
+                )
+                if not lesson:
+                    raise HTTPException(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        detail="Lesson not found",
+                    )
+
+            delta = data.amount
+            if transaction_type == StarTransactionType.WRITE_OFF:
+                delta = -delta
+
+            new_balance = link.star_balance + delta
+            if new_balance < 0:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Insufficient stars",
+                )
+
+            link.star_balance = new_balance
+            transaction = await self.star_transaction_repo.create_pending(
+                tutor_student_id=link.id,
+                lesson_id=lesson.id if lesson else None,
+                created_by=tutor_id,
+                delta=delta,
+                balance_after=new_balance,
+                transaction_type=transaction_type,
+                reason=data.reason,
+            )
+
+            self.session.add(link)
+            await self.session.commit()
+            await self.session.refresh(transaction)
+            return self._star_transaction_to_schema(link, transaction, lesson=lesson)
+        except HTTPException:
+            await self.session.rollback()
+            raise
+        except Exception:
+            await self.session.rollback()
+            raise
+
+    def _progress_status(self, lesson: Lesson, now: datetime) -> str:
+        if lesson.l_date is None:
+            return "unscheduled"
+        if self._is_upcoming(lesson, now):
+            return "upcoming"
+        return "completed"
 
     def _is_upcoming(self, lesson: Lesson, now: datetime) -> bool:
         if lesson.l_date is None:

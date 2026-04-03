@@ -39,6 +39,11 @@ class SubmissionStatus(str, PyEnum):
     CHECKED = "checked"
 
 
+class StarTransactionType(str, PyEnum):
+    ACCRUAL = "accrual"
+    WRITE_OFF = "write_off"
+
+
 # --- Tables ---
 class User(Base):
     __tablename__ = "users"
@@ -82,6 +87,9 @@ class TutorStudent(Base):
     )
     subject: Mapped[Optional[str]] = mapped_column(String(30))
     student_inf: Mapped[Optional[str]] = mapped_column(Text)
+    star_balance: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0", default=0
+    )
 
     tutor: Mapped["User"] = relationship(
         foreign_keys=[tutor_id], back_populates="tutor_links"
@@ -90,6 +98,9 @@ class TutorStudent(Base):
         foreign_keys=[student_id], back_populates="student_links"
     )
     lessons: Mapped[List["Lesson"]] = relationship(
+        back_populates="tutor_student", cascade="all, delete-orphan"
+    )
+    star_transactions: Mapped[List["StarTransaction"]] = relationship(
         back_populates="tutor_student", cascade="all, delete-orphan"
     )
 
@@ -114,6 +125,9 @@ class Lesson(Base):
     tutor_student: Mapped["TutorStudent"] = relationship(back_populates="lessons")
     lesson_files: Mapped[List["LessonFile"]] = relationship(
         back_populates="lesson", cascade="all, delete-orphan"
+    )
+    star_transactions: Mapped[List["StarTransaction"]] = relationship(
+        back_populates="lesson"
     )
 
 
@@ -162,3 +176,37 @@ class LessonFile(Base):
 
     lesson: Mapped["Lesson"] = relationship(back_populates="lesson_files")
     file: Mapped["File"] = relationship(back_populates="lesson_links")
+
+
+class StarTransaction(Base):
+    __tablename__ = "star_transaction"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    tutor_student_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("tutor_student.id", ondelete="CASCADE"), nullable=False
+    )
+    lesson_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("lesson.id", ondelete="SET NULL")
+    )
+    created_by: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL")
+    )
+    delta: Mapped[int] = mapped_column(Integer, nullable=False)
+    balance_after: Mapped[int] = mapped_column(Integer, nullable=False)
+    transaction_type: Mapped[StarTransactionType] = mapped_column(
+        SAEnum(
+            StarTransactionType,
+            name="star_transaction_type",
+            create_constraint=True,
+        ),
+        nullable=False,
+    )
+    reason: Mapped[Optional[str]] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP, server_default=func.now(), default=datetime.now
+    )
+
+    tutor_student: Mapped["TutorStudent"] = relationship(
+        back_populates="star_transactions"
+    )
+    lesson: Mapped[Optional["Lesson"]] = relationship(back_populates="star_transactions")

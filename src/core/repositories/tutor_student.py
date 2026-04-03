@@ -26,6 +26,24 @@ class TutorStudentRepository(BaseRepository[TutorStudent]):
         result = await self.session.execute(query)
         return result.scalar_one_or_none()
 
+    async def get_for_tutor(
+        self, tutor_id: int, tutor_student_id: int, *, for_update: bool = False
+    ):
+        query = (
+            select(TutorStudent)
+            .where(
+                and_(
+                    TutorStudent.id == tutor_student_id,
+                    TutorStudent.tutor_id == tutor_id,
+                )
+            )
+            .options(selectinload(TutorStudent.student))
+        )
+        if for_update:
+            query = query.with_for_update()
+        result = await self.session.execute(query)
+        return result.scalar_one_or_none()
+
     async def create(
         self,
         tutor_id: int,
