@@ -90,3 +90,10 @@ class LessonRepository(BaseRepository[Lesson]):
         )
         result = await self.session.execute(query)
         return result.scalar_one_or_none()
+
+    async def save(self, lesson: Lesson) -> Lesson:
+        self.session.add(lesson)
+        await self.session.flush()
+        await self.session.commit()
+        await self.session.refresh(lesson)
+        return lesson

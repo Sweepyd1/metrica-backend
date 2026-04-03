@@ -16,6 +16,7 @@ from src.database.models import (
 )
 from src.schemas.tutor import (
     LessonCreate,
+    LessonUpdate,
     SubmissionOut,
     TutorLessonAttachmentOut,
     TutorLessonDetail,
@@ -113,6 +114,51 @@ class TutorService:
             )
         return lesson
 
+    async def update_lesson(
+        self, tutor_id: int, lesson_id: int, data: LessonUpdate
+    ) -> Lesson:
+        lesson = await self.lesson_repo.get_tutor_lesson(tutor_id, lesson_id)
+        if not lesson:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Lesson not found"
+            )
+
+        link = await self.tutor_student_repo.get(data.tutor_student_id)
+        if not link or link.tutor_id != tutor_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Not your student"
+            )
+
+        lesson.tutor_student_id = data.tutor_student_id
+        lesson.l_date = data.date
+        lesson.l_time = data.time
+        lesson.topic = data.topic
+        lesson.meet_link = data.meet_link
+        lesson.homework_deadline = data.homework_deadline
+
+        await self.lesson_file_repo.sync_lesson_files(
+            lesson,
+            material_file_ids=data.material_file_ids,
+            homework_task_file_ids=data.homework_task_file_ids,
+        )
+        await self.lesson_repo.save(lesson)
+
+        updated_lesson = await self.lesson_repo.get_tutor_lesson(tutor_id, lesson_id)
+        if not updated_lesson:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Lesson not found"
+            )
+        return updated_lesson
+
+    async def delete_lesson(self, tutor_id: int, lesson_id: int) -> None:
+        lesson = await self.lesson_repo.get_tutor_lesson(tutor_id, lesson_id)
+        if not lesson:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Lesson not found"
+            )
+
+        await self.lesson_repo.delete(lesson.id)
+
     async def get_my_lessons(
         self,
         tutor_id: int,
@@ -169,22 +215,23 @@ class TutorService:
     async def check_submission(
         self, tutor_id: int, submission_id: int, comment: str = None
     ) -> LessonFile:
-        sub = await self.lesson_file_repo.get(submission_id)
+        sub = await self.lesson_file_repo.get_submission_for_tutor(
+            tutor_id, submission_id
+        )
         if not sub or sub.kind != LessonFileKind.SUBMISSION:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Submission not found"
             )
         # проверка доступа
-        lesson = await self.lesson_repo.get(sub.lesson_id)
-        if not lesson:
-            raise HTTPException(status_code=404, detail="Lesson not found")
-        link = await self.tutor_student_repo.get(lesson.tutor_student_id)
-        if link.tutor_id != tutor_id:
-            raise HTTPException(status_code=403, detail="Not your student")
         sub.status = SubmissionStatus.CHECKED
         sub.comment = comment
         await self.lesson_file_repo.save(sub)
-        return sub
+        checked_submission = await self.lesson_file_repo.get_submission_for_tutor(
+            tutor_id, submission_id
+        )
+        if not checked_submission:
+            raise HTTPException(status_code=404, detail="Submission not found")
+        return checked_submission
 
     def _build_lesson_summary(self, lesson: Lesson) -> TutorLessonSummary:
         materials, homework_task_files, submission = self._split_lesson_files(lesson)

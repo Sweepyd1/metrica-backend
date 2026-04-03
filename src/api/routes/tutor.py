@@ -3,7 +3,7 @@ import os
 import shutil
 from typing import List
 
-from fastapi import APIRouter, Depends, File, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Query, UploadFile, status
 
 from src.api.dependencies import get_current_tutor, get_db_session, get_tutor_service
 from src.core.service.tutor import TutorService
@@ -11,6 +11,7 @@ from src.schemas.tutor import (
     StudentAdd,
     StudentOut,
     LessonCreate,
+    LessonUpdate,
     TutorLessonDetail,
     TutorLessonListOut,
     LessonOut,
@@ -23,6 +24,19 @@ from src.database.models import User
 from src.core.repositories.file import FileRepository
 
 router = APIRouter(prefix="/tutor", tags=["tutor"])
+
+
+def to_lesson_out(lesson) -> LessonOut:
+    return LessonOut(
+        id=lesson.id,
+        tutor_student_id=lesson.tutor_student_id,
+        date=lesson.l_date,
+        time=lesson.l_time,
+        topic=lesson.topic,
+        meet_link=lesson.meet_link,
+        homework_done=lesson.homework_done,
+        homework_deadline=lesson.homework_deadline,
+    )
 
 
 @router.post("/students", response_model=StudentOut)
@@ -59,16 +73,28 @@ async def create_lesson(
     service: TutorService = Depends(get_tutor_service),
 ):
     lesson = await service.create_lesson(tutor.id, data)
-    return LessonOut(
-        id=lesson.id,
-        tutor_student_id=lesson.tutor_student_id,
-        date=lesson.l_date,
-        time=lesson.l_time,
-        topic=lesson.topic,
-        meet_link=lesson.meet_link,
-        homework_done=lesson.homework_done,
-        homework_deadline=lesson.homework_deadline,
-    )
+    return to_lesson_out(lesson)
+
+
+@router.patch("/lessons/{lesson_id}", response_model=LessonOut)
+@router.put("/lessons/{lesson_id}", response_model=LessonOut)
+async def update_lesson(
+    lesson_id: int,
+    data: LessonUpdate,
+    tutor: User = Depends(get_current_tutor),
+    service: TutorService = Depends(get_tutor_service),
+):
+    lesson = await service.update_lesson(tutor.id, lesson_id, data)
+    return to_lesson_out(lesson)
+
+
+@router.delete("/lessons/{lesson_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_lesson(
+    lesson_id: int,
+    tutor: User = Depends(get_current_tutor),
+    service: TutorService = Depends(get_tutor_service),
+):
+    await service.delete_lesson(tutor.id, lesson_id)
 
 
 @router.get("/lessons", response_model=TutorLessonListOut)
