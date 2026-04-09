@@ -2,11 +2,10 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
-from typing import TYPE_CHECKING
 
 from src.config import cfg
+from src.database.models import Base
 
 
 class DatabaseManager:
@@ -70,9 +69,5 @@ class DatabaseManager:
                     await session.close()
         else:
             yield existing_session
-
-
-Base = declarative_base()
-
 
 db_manager = DatabaseManager(cfg.database.async_url)

@@ -44,18 +44,36 @@ class StarTransactionType(str, PyEnum):
     WRITE_OFF = "write_off"
 
 
+class AuthProvider(str, PyEnum):
+    PASSWORD = "password"
+    PHONE = "phone"
+    VK = "vk"
+    YANDEX = "yandex"
+    TELEGRAM = "telegram"
+
+
 # --- Tables ---
 class User(Base):
     __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    email: Mapped[str] = mapped_column(String(200), unique=True, nullable=False)
-    password: Mapped[str] = mapped_column(String(200), nullable=False)
+    email: Mapped[Optional[str]] = mapped_column(String(200), unique=True)
+    phone: Mapped[Optional[str]] = mapped_column(String(32), unique=True)
+    password: Mapped[Optional[str]] = mapped_column(String(200))
     first_name: Mapped[str] = mapped_column(String(50), nullable=False)
     last_name: Mapped[Optional[str]] = mapped_column(String(50))
     role: Mapped[UserRole] = mapped_column(
         SAEnum(UserRole, name="user_role", create_constraint=True),
         nullable=False,
+    )
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, server_default="true", default=True, nullable=False
+    )
+    is_email_verified: Mapped[bool] = mapped_column(
+        Boolean, server_default="false", default=False, nullable=False
+    )
+    is_phone_verified: Mapped[bool] = mapped_column(
+        Boolean, server_default="false", default=False, nullable=False
     )
 
     # Relationships (опционально, можно оставить)
@@ -72,6 +90,89 @@ class User(Base):
     uploaded_files: Mapped[List["File"]] = relationship(back_populates="uploader")
     groups: Mapped[List["Group"]] = relationship(
         secondary="group_student", back_populates="students"
+    )
+    auth_identities: Mapped[List["AuthIdentity"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+
+
+class AuthIdentity(Base):
+    __tablename__ = "auth_identities"
+    __table_args__ = (
+        UniqueConstraint(
+            "provider", "provider_user_id", name="uq_auth_identity_provider_user_id"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    provider: Mapped[AuthProvider] = mapped_column(
+        SAEnum(AuthProvider, name="auth_provider", create_constraint=True),
+        nullable=False,
+    )
+    provider_user_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    provider_email: Mapped[Optional[str]] = mapped_column(String(200))
+    provider_phone: Mapped[Optional[str]] = mapped_column(String(32))
+    is_verified: Mapped[bool] = mapped_column(
+        Boolean, server_default="false", default=False, nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP, server_default=func.now(), default=datetime.now
+    )
+    last_login_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP, server_default=func.now(), default=datetime.now
+    )
+
+    user: Mapped["User"] = relationship(back_populates="auth_identities")
+
+
+class PhoneAuthCode(Base):
+    __tablename__ = "phone_auth_codes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    phone: Mapped[str] = mapped_column(String(32), nullable=False)
+    code_hash: Mapped[str] = mapped_column(String(128), nullable=False)
+    attempts: Mapped[int] = mapped_column(
+        Integer, server_default="0", default=0, nullable=False
+    )
+    expires_at: Mapped[datetime] = mapped_column(TIMESTAMP, nullable=False)
+    resend_available_at: Mapped[datetime] = mapped_column(TIMESTAMP, nullable=False)
+    used_at: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP)
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP, server_default=func.now(), default=datetime.now
+    )
+
+
+class TelegramAuthSession(Base):
+    __tablename__ = "telegram_auth_sessions"
+    __table_args__ = (
+        UniqueConstraint(
+            "session_token", name="uq_telegram_auth_sessions_session_token"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    session_token: Mapped[str] = mapped_column(String(64), nullable=False)
+    confirmation_code: Mapped[str] = mapped_column(String(16), nullable=False)
+    role: Mapped[UserRole] = mapped_column(
+        SAEnum(UserRole, name="user_role", create_constraint=False),
+        nullable=False,
+    )
+    user_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL")
+    )
+    telegram_user_id: Mapped[Optional[str]] = mapped_column(String(64))
+    telegram_chat_id: Mapped[Optional[str]] = mapped_column(String(64))
+    telegram_username: Mapped[Optional[str]] = mapped_column(String(255))
+    telegram_first_name: Mapped[Optional[str]] = mapped_column(String(255))
+    telegram_last_name: Mapped[Optional[str]] = mapped_column(String(255))
+    confirmed_at: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP)
+    expires_at: Mapped[datetime] = mapped_column(TIMESTAMP, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP, server_default=func.now(), default=datetime.now
     )
 
 

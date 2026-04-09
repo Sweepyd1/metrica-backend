@@ -16,7 +16,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 
 # Импортируем конфиг и базовый класс моделей
 from src.config import cfg
-from src.database.db_manager import Base
+from src.database.models import Base
 from src.database.models import *
 
 # this is the Alembic Config object, which provides

@@ -4,21 +4,25 @@ from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.core.repositories.auth_identity import AuthIdentityRepository
 from src.core.repositories.file import FileRepository
 from src.core.repositories.group import GroupRepository
 from src.core.repositories.lesson import LessonRepository
 from src.core.repositories.lesson_file import LessonFileRepository
+from src.core.repositories.phone_auth_code import PhoneAuthCodeRepository
 from src.core.repositories.star_transaction import StarTransactionRepository
+from src.core.repositories.telegram_auth_session import TelegramAuthSessionRepository
 from src.core.repositories.tutor_student import TutorStudentRepository
 from src.core.repositories.user import UserRepository
 from src.core.service.auth import AuthService
 from src.core.service.student import StudentService
 from src.core.service.tutor import TutorService
+from src.config import cfg
 from src.database.db_manager import db_manager
 from src.database.models import User, UserRole
 
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login", auto_error=False)
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/token", auto_error=False)
 
 
 async def get_db_session() -> AsyncIterator[AsyncSession]:
@@ -29,18 +33,23 @@ async def get_db_session() -> AsyncIterator[AsyncSession]:
 async def get_auth_service(
     db: AsyncSession = Depends(get_db_session),
 ) -> AuthService:
-    repo = UserRepository(db)
-    return AuthService(repo)
+    return AuthService(
+        session=db,
+        user_repo=UserRepository(db),
+        identity_repo=AuthIdentityRepository(db),
+        phone_code_repo=PhoneAuthCodeRepository(db),
+        telegram_auth_session_repo=TelegramAuthSessionRepository(db),
+    )
 
 
 async def get_current_user(
-    request: Request, auth_service: AuthService = Depends(get_auth_service)
+    request: Request,
+    token_from_bearer: str | None = Depends(oauth2_scheme),
+    auth_service: AuthService = Depends(get_auth_service),
 ) -> User:
-    token = request.cookies.get("access_token")
+    token = request.cookies.get(cfg.auth.access_cookie_name)
     if not token:
-        auth_header = request.headers.get("Authorization")
-        if auth_header and auth_header.startswith("Bearer "):
-            token = auth_header.split(" ")[1]
+        token = token_from_bearer
     if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated"
