@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import uvicorn
-from src.api.routes import auth, student, tutor
+from src.api.routes import auth, parent, student, tutor
 from src.config import cfg, setup_environment
 
 setup_environment()
@@ -21,6 +21,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(auth.router)
+app.include_router(parent.router)
 app.include_router(tutor.router)
 app.include_router(student.router)
 

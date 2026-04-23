@@ -8,6 +8,13 @@ from fastapi import APIRouter, Depends, File, Query, UploadFile, status
 from src.api.dependencies import get_current_tutor, get_db_session, get_tutor_service
 from src.core.service.tutor import TutorService
 from src.schemas.group import GroupCreate, GroupDetailOut, GroupOut, GroupStudentsUpdate
+from src.schemas.parent import (
+    ParentChatMessageCreate,
+    ParentChatMessageOut,
+    ParentAccessReview,
+    ParentAccessStatus,
+    TutorParentAccessRequestOut,
+)
 from src.schemas.tutor import (
     StudentAdd,
     StudentOut,
@@ -70,6 +77,81 @@ async def list_students(
     service: TutorService = Depends(get_tutor_service),
 ):
     return await service.get_my_students(tutor.id)
+
+
+@router.get(
+    "/parent-access-requests",
+    response_model=List[TutorParentAccessRequestOut],
+)
+async def list_parent_access_requests(
+    status_filter: ParentAccessStatus | None = Query(default=None, alias="status"),
+    tutor: User = Depends(get_current_tutor),
+    service: TutorService = Depends(get_tutor_service),
+):
+    return await service.get_parent_access_requests(
+        tutor.id,
+        status_filter=status_filter.value if status_filter else None,
+    )
+
+
+@router.post(
+    "/parent-access-requests/{request_id}/approve",
+    response_model=TutorParentAccessRequestOut,
+)
+async def approve_parent_access_request(
+    request_id: int,
+    data: ParentAccessReview,
+    tutor: User = Depends(get_current_tutor),
+    service: TutorService = Depends(get_tutor_service),
+):
+    return await service.approve_parent_access_request(
+        tutor.id,
+        request_id,
+        data.comment,
+    )
+
+
+@router.post(
+    "/parent-access-requests/{request_id}/reject",
+    response_model=TutorParentAccessRequestOut,
+)
+async def reject_parent_access_request(
+    request_id: int,
+    data: ParentAccessReview,
+    tutor: User = Depends(get_current_tutor),
+    service: TutorService = Depends(get_tutor_service),
+):
+    return await service.reject_parent_access_request(
+        tutor.id,
+        request_id,
+        data.comment,
+    )
+
+
+@router.get(
+    "/parent-accesses/{access_id}/messages",
+    response_model=List[ParentChatMessageOut],
+)
+async def list_parent_access_messages(
+    access_id: int,
+    tutor: User = Depends(get_current_tutor),
+    service: TutorService = Depends(get_tutor_service),
+):
+    return await service.get_parent_access_messages(tutor.id, access_id)
+
+
+@router.post(
+    "/parent-accesses/{access_id}/messages",
+    response_model=ParentChatMessageOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_parent_access_message(
+    access_id: int,
+    data: ParentChatMessageCreate,
+    tutor: User = Depends(get_current_tutor),
+    service: TutorService = Depends(get_tutor_service),
+):
+    return await service.send_parent_access_message(tutor.id, access_id, data)
 
 
 @router.get(

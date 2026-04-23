@@ -9,12 +9,15 @@ from src.core.repositories.file import FileRepository
 from src.core.repositories.group import GroupRepository
 from src.core.repositories.lesson import LessonRepository
 from src.core.repositories.lesson_file import LessonFileRepository
+from src.core.repositories.parent_access import ParentAccessRepository
+from src.core.repositories.parent_chat_message import ParentChatMessageRepository
 from src.core.repositories.phone_auth_code import PhoneAuthCodeRepository
 from src.core.repositories.star_transaction import StarTransactionRepository
 from src.core.repositories.telegram_auth_session import TelegramAuthSessionRepository
 from src.core.repositories.tutor_student import TutorStudentRepository
 from src.core.repositories.user import UserRepository
 from src.core.service.auth import AuthService
+from src.core.service.parent import ParentService
 from src.core.service.student import StudentService
 from src.core.service.tutor import TutorService
 from src.config import cfg
@@ -76,11 +79,21 @@ async def get_current_student(current_user: User = Depends(get_current_user)) ->
     return current_user
 
 
+async def get_current_parent(current_user: User = Depends(get_current_user)) -> User:
+    if current_user.role != UserRole.PARENT:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Not a parent"
+        )
+    return current_user
+
+
 async def get_tutor_service(db: AsyncSession = Depends(get_db_session)) -> TutorService:
     return TutorService(
         tutor_student_repo=TutorStudentRepository(db),
         lesson_repo=LessonRepository(db),
         lesson_file_repo=LessonFileRepository(db),
+        parent_access_repo=ParentAccessRepository(db),
+        parent_chat_message_repo=ParentChatMessageRepository(db),
         star_transaction_repo=StarTransactionRepository(db),
         user_repo=UserRepository(db),
         session=db,
@@ -95,4 +108,16 @@ async def get_student_service(
         lesson_repo=LessonRepository(db),
         lesson_file_repo=LessonFileRepository(db),
         file_repo=FileRepository(db),
+    )
+
+
+async def get_parent_service(
+    db: AsyncSession = Depends(get_db_session),
+) -> ParentService:
+    return ParentService(
+        parent_access_repo=ParentAccessRepository(db),
+        parent_chat_message_repo=ParentChatMessageRepository(db),
+        tutor_student_repo=TutorStudentRepository(db),
+        lesson_repo=LessonRepository(db),
+        user_repo=UserRepository(db),
     )

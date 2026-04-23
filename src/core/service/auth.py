@@ -24,6 +24,7 @@ from src.database.models import (
     PhoneAuthCode,
     TelegramAuthSession,
     User,
+    UserRole,
 )
 from src.config import cfg
 from src.core.repositories.auth_identity import AuthIdentityRepository
@@ -790,7 +791,7 @@ class AuthService:
         session = TelegramAuthSession(
             session_token=session_token,
             confirmation_code=confirmation_code,
-            role=request_data.role.value,
+            role=UserRole(request_data.role.value),
             expires_at=now
             + timedelta(seconds=cfg.auth.telegram_message_auth_ttl_seconds),
         )
@@ -990,13 +991,15 @@ class AuthService:
         *,
         first_name: str,
         last_name: str | None,
-        role: str,
+        role: UserRole | str,
         email: str | None = None,
         phone: str | None = None,
         password_hash: str | None = None,
         is_email_verified: bool = False,
         is_phone_verified: bool = False,
     ) -> User:
+        if isinstance(role, str):
+            role = UserRole(role)
         user = User(
             email=email,
             phone=phone,

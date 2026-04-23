@@ -8,18 +8,30 @@ from src.core.repositories.group import GroupRepository
 from src.core.repositories.tutor_student import TutorStudentRepository
 from src.core.repositories.lesson import LessonRepository
 from src.core.repositories.lesson_file import LessonFileRepository
+from src.core.repositories.parent_access import ParentAccessRepository
+from src.core.repositories.parent_chat_message import ParentChatMessageRepository
 from src.core.repositories.star_transaction import StarTransactionRepository
 from src.core.repositories.user import UserRepository
 from src.database.models import (
     TutorStudent,
     Lesson,
     LessonFile,
+    ParentAccess,
+    ParentAccessStatus,
+    ParentChatMessage,
+    ParentChatSenderRole,
     StarTransaction,
     StarTransactionType,
     SubmissionStatus,
     LessonFileKind,
+    UserRole,
 )
 from src.schemas.group import GroupCreate, GroupDetailOut, GroupOut, StudentBasicOut
+from src.schemas.parent import (
+    ParentChatMessageCreate,
+    ParentChatMessageOut,
+    TutorParentAccessRequestOut,
+)
 from src.schemas.tutor import (
     LessonCreate,
     LessonUpdate,
@@ -42,6 +54,8 @@ class TutorService:
         tutor_student_repo: TutorStudentRepository,
         lesson_repo: LessonRepository,
         lesson_file_repo: LessonFileRepository,
+        parent_access_repo: ParentAccessRepository,
+        parent_chat_message_repo: ParentChatMessageRepository,
         star_transaction_repo: StarTransactionRepository,
         user_repo: UserRepository,
         session: AsyncSession,
@@ -50,6 +64,8 @@ class TutorService:
         self.tutor_student_repo = tutor_student_repo
         self.lesson_repo = lesson_repo
         self.lesson_file_repo = lesson_file_repo
+        self.parent_access_repo = parent_access_repo
+        self.parent_chat_message_repo = parent_chat_message_repo
         self.star_transaction_repo = star_transaction_repo
         self.user_repo = user_repo
         self.session = session
@@ -57,7 +73,7 @@ class TutorService:
 
     async def add_student(self, tutor_id: int, email: str) -> TutorStudent:
         student = await self.user_repo.get_by_email(email)
-        if not student or student.role != "student":
+        if not student or student.role != UserRole.STUDENT:
             raise HTTPException(
                 status_code=404, detail="Не удалось найти ученика с таким email"
             )
@@ -104,6 +120,84 @@ class TutorService:
                 }
             )
         return result
+
+    async def get_parent_access_requests(
+        self,
+        tutor_id: int,
+        status_filter: ParentAccessStatus | str | None = None,
+    ) -> List[TutorParentAccessRequestOut]:
+        if isinstance(status_filter, str):
+            status_filter = ParentAccessStatus(status_filter)
+        accesses = await self.parent_access_repo.list_for_tutor(
+            tutor_id,
+            status=status_filter,
+        )
+        return [self._build_parent_access_request_out(access) for access in accesses]
+
+    async def approve_parent_access_request(
+        self,
+        tutor_id: int,
+        request_id: int,
+        comment: str | None = None,
+    ) -> TutorParentAccessRequestOut:
+        return await self._review_parent_access_request(
+            tutor_id=tutor_id,
+            request_id=request_id,
+            target_status=ParentAccessStatus.APPROVED,
+            comment=comment,
+        )
+
+    async def reject_parent_access_request(
+        self,
+        tutor_id: int,
+        request_id: int,
+        comment: str | None = None,
+    ) -> TutorParentAccessRequestOut:
+        return await self._review_parent_access_request(
+            tutor_id=tutor_id,
+            request_id=request_id,
+            target_status=ParentAccessStatus.REJECTED,
+            comment=comment,
+        )
+
+    async def get_parent_access_messages(
+        self,
+        tutor_id: int,
+        access_id: int,
+    ) -> List[ParentChatMessageOut]:
+        access = await self._get_approved_parent_access_for_tutor(tutor_id, access_id)
+        messages = await self.parent_chat_message_repo.list_for_access(access.id)
+        return [self._build_parent_chat_message_out(message) for message in messages]
+
+    async def send_parent_access_message(
+        self,
+        tutor_id: int,
+        access_id: int,
+        data: ParentChatMessageCreate,
+    ) -> ParentChatMessageOut:
+        access = await self._get_approved_parent_access_for_tutor(tutor_id, access_id)
+        text = self._clean_text(data.text)
+        if not text:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Сообщение не может быть пустым",
+            )
+
+        message = ParentChatMessage(
+            parent_access_id=access.id,
+            sender_id=tutor_id,
+            sender_role=ParentChatSenderRole.TUTOR,
+            text=text,
+        )
+        await self.parent_chat_message_repo.save(message)
+
+        fresh_message = await self.parent_chat_message_repo.get_by_id(message.id)
+        if not fresh_message:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Не удалось сохранить сообщение",
+            )
+        return self._build_parent_chat_message_out(fresh_message)
 
     async def get_student_stars(
         self, tutor_id: int, tutor_student_id: int, limit: int = 50
@@ -452,6 +546,59 @@ class TutorService:
         # Этот метод может остаться в сервисе, но он использует репозиторий TutorStudentRepository
         return await self.tutor_student_repo.get_valid_student_ids(tutor_id, student_ids)
 
+    async def _review_parent_access_request(
+        self,
+        *,
+        tutor_id: int,
+        request_id: int,
+        target_status: ParentAccessStatus,
+        comment: str | None,
+    ) -> TutorParentAccessRequestOut:
+        access = await self.parent_access_repo.get_for_tutor(tutor_id, request_id)
+        if not access:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Запрос родителя не найден",
+            )
+
+        if access.status != ParentAccessStatus.PENDING:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Запрос уже обработан",
+            )
+
+        access.status = target_status
+        access.review_comment = self._clean_text(comment)
+        access.reviewed_by = tutor_id
+        access.responded_at = datetime.utcnow()
+        await self.parent_access_repo.save(access)
+
+        refreshed_access = await self.parent_access_repo.get_for_tutor(tutor_id, request_id)
+        if not refreshed_access:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Запрос родителя не найден",
+            )
+        return self._build_parent_access_request_out(refreshed_access)
+
+    async def _get_approved_parent_access_for_tutor(
+        self,
+        tutor_id: int,
+        access_id: int,
+    ) -> ParentAccess:
+        access = await self.parent_access_repo.get_for_tutor(tutor_id, access_id)
+        if not access:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Доступ родителя не найден",
+            )
+        if access.status != ParentAccessStatus.APPROVED:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Чат доступен только после одобрения доступа родителя",
+            )
+        return access
+
     def _build_lesson_summary(self, lesson: Lesson) -> TutorLessonSummary:
         materials, homework_task_files, submission = self._split_lesson_files(lesson)
         student = lesson.tutor_student.student
@@ -683,3 +830,45 @@ class TutorService:
             lesson.time or time.min,
             lesson.id,
         )
+
+    def _build_parent_access_request_out(
+        self,
+        access: ParentAccess,
+    ) -> TutorParentAccessRequestOut:
+        parent = access.parent
+        student = access.tutor_student.student
+        return TutorParentAccessRequestOut(
+            id=access.id,
+            tutor_student_id=access.tutor_student_id,
+            status=access.status.value,
+            parent_id=parent.id,
+            parent_name=f"{parent.first_name} {parent.last_name or ''}".strip(),
+            parent_email=parent.email,
+            student_id=student.id,
+            student_name=f"{student.first_name} {student.last_name or ''}".strip(),
+            request_message=access.request_message,
+            review_comment=access.review_comment,
+            created_at=access.created_at,
+            responded_at=access.responded_at,
+        )
+
+    def _build_parent_chat_message_out(
+        self,
+        message: ParentChatMessage,
+    ) -> ParentChatMessageOut:
+        sender = message.sender
+        return ParentChatMessageOut(
+            id=message.id,
+            access_id=message.parent_access_id,
+            sender_id=message.sender_id,
+            sender_role=message.sender_role.value,
+            sender_name=f"{sender.first_name} {sender.last_name or ''}".strip(),
+            text=message.text,
+            created_at=message.created_at,
+        )
+
+    def _clean_text(self, value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        return cleaned or None

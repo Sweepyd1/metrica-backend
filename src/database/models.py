@@ -26,6 +26,18 @@ class Base(DeclarativeBase):
 class UserRole(str, PyEnum):
     TUTOR = "tutor"
     STUDENT = "student"
+    PARENT = "parent"
+
+
+class ParentAccessStatus(str, PyEnum):
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+
+class ParentChatSenderRole(str, PyEnum):
+    PARENT = "parent"
+    TUTOR = "tutor"
 
 
 class LessonFileKind(str, PyEnum):
@@ -93,6 +105,15 @@ class User(Base):
     )
     auth_identities: Mapped[List["AuthIdentity"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
+    )
+    parent_accesses: Mapped[List["ParentAccess"]] = relationship(
+        foreign_keys="[ParentAccess.parent_id]",
+        back_populates="parent",
+        cascade="all, delete-orphan",
+    )
+    reviewed_parent_accesses: Mapped[List["ParentAccess"]] = relationship(
+        foreign_keys="[ParentAccess.reviewed_by]",
+        back_populates="reviewer",
     )
 
 
@@ -207,6 +228,9 @@ class TutorStudent(Base):
     star_transactions: Mapped[List["StarTransaction"]] = relationship(
         back_populates="tutor_student", cascade="all, delete-orphan"
     )
+    parent_accesses: Mapped[List["ParentAccess"]] = relationship(
+        back_populates="tutor_student", cascade="all, delete-orphan"
+    )
 
 
 class Lesson(Base):
@@ -233,6 +257,85 @@ class Lesson(Base):
     star_transactions: Mapped[List["StarTransaction"]] = relationship(
         back_populates="lesson"
     )
+
+
+class ParentAccess(Base):
+    __tablename__ = "parent_access"
+    __table_args__ = (
+        UniqueConstraint(
+            "parent_id",
+            "tutor_student_id",
+            name="uq_parent_access_parent_tutor_student",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    parent_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    tutor_student_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("tutor_student.id", ondelete="CASCADE"), nullable=False
+    )
+    status: Mapped[ParentAccessStatus] = mapped_column(
+        SAEnum(
+            ParentAccessStatus,
+            name="parent_access_status",
+            create_constraint=True,
+        ),
+        nullable=False,
+        default=ParentAccessStatus.PENDING,
+        server_default=ParentAccessStatus.PENDING.name,
+    )
+    request_message: Mapped[Optional[str]] = mapped_column(Text)
+    review_comment: Mapped[Optional[str]] = mapped_column(Text)
+    reviewed_by: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP, server_default=func.now(), default=datetime.now
+    )
+    responded_at: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP)
+
+    parent: Mapped["User"] = relationship(
+        foreign_keys=[parent_id], back_populates="parent_accesses"
+    )
+    tutor_student: Mapped["TutorStudent"] = relationship(
+        back_populates="parent_accesses"
+    )
+    reviewer: Mapped[Optional["User"]] = relationship(
+        foreign_keys=[reviewed_by], back_populates="reviewed_parent_accesses"
+    )
+    messages: Mapped[List["ParentChatMessage"]] = relationship(
+        back_populates="parent_access",
+        cascade="all, delete-orphan",
+    )
+
+
+class ParentChatMessage(Base):
+    __tablename__ = "parent_chat_message"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    parent_access_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("parent_access.id", ondelete="CASCADE"), nullable=False
+    )
+    sender_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    sender_role: Mapped[ParentChatSenderRole] = mapped_column(
+        SAEnum(
+            ParentChatSenderRole,
+            name="parent_chat_sender_role",
+            create_constraint=True,
+        ),
+        nullable=False,
+    )
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP, server_default=func.now(), default=datetime.now
+    )
+
+    parent_access: Mapped["ParentAccess"] = relationship(back_populates="messages")
+    sender: Mapped["User"] = relationship(foreign_keys=[sender_id])
 
 
 class File(Base):

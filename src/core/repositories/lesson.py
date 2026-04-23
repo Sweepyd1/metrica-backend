@@ -114,6 +114,11 @@ class LessonRepository(BaseRepository[Lesson]):
                     Lesson.id == lesson_id,
                 )
             )
+            .options(
+                selectinload(Lesson.tutor_student).selectinload(TutorStudent.student),
+                selectinload(Lesson.tutor_student).selectinload(TutorStudent.tutor),
+                selectinload(Lesson.lesson_files).selectinload(LessonFile.file),
+            )
         )
         result = await self.session.execute(query)
         return result.scalar_one_or_none()
