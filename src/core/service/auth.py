@@ -5,7 +5,7 @@ from jose import jwt, JWTError
 from passlib.context import CryptContext
 from fastapi import HTTPException, status
 
-from database.models import User
+from database.models import User, UserRole
 from config import cfg
 from core.repositories.user import UserRepository
 from schemas.user import UserCreate, UserLogin, TokenPayload
@@ -101,7 +101,7 @@ class AuthService:
             password=hashed_password,
             first_name=user_data.first_name,
             last_name=user_data.last_name,
-            role=user_data.role.value,  # если роль передаётся, иначе ставим student
+            role=UserRole(user_data.role.value),
         )
         return user
 

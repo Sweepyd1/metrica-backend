@@ -8,6 +8,7 @@ from typing import Optional
 class UserRole(str, Enum):
     TUTOR = "tutor"
     STUDENT = "student"
+    PARENT = "parent"
 
 
 # ---------- Запросы ----------

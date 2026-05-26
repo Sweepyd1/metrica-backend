@@ -5,12 +5,15 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.repositories.file import FileRepository
+from core.repositories.bonus_task import BonusTaskRepository
 from core.repositories.group import GroupRepository
 from core.repositories.lesson import LessonRepository
 from core.repositories.lesson_file import LessonFileRepository
+from core.repositories.parent_student import ParentStudentRepository
 from core.repositories.tutor_student import TutorStudentRepository
 from core.repositories.user import UserRepository
 from core.service.auth import AuthService
+from core.service.parent import ParentService
 from core.service.student import StudentService
 from core.service.tutor import TutorService
 from database.db_manager import db_manager
@@ -66,13 +69,23 @@ async def get_current_student(current_user: User = Depends(get_current_user)) ->
     return current_user
 
 
+async def get_current_parent(current_user: User = Depends(get_current_user)) -> User:
+    if current_user.role != UserRole.PARENT:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Not a parent"
+        )
+    return current_user
+
+
 async def get_tutor_service(db: AsyncSession = Depends(get_db_session)) -> TutorService:
     return TutorService(
         tutor_student_repo=TutorStudentRepository(db),
         lesson_repo=LessonRepository(db),
         lesson_file_repo=LessonFileRepository(db),
         user_repo=UserRepository(db),
-        group_repo=GroupRepository(db)
+        group_repo=GroupRepository(db),
+        file_repo=FileRepository(db),
+        bonus_task_repo=BonusTaskRepository(db),
     )
 
 
@@ -83,4 +96,16 @@ async def get_student_service(
         lesson_repo=LessonRepository(db),
         lesson_file_repo=LessonFileRepository(db),
         file_repo=FileRepository(db),
+        bonus_task_repo=BonusTaskRepository(db),
+        tutor_student_repo=TutorStudentRepository(db),
+    )
+
+
+async def get_parent_service(
+    db: AsyncSession = Depends(get_db_session),
+) -> ParentService:
+    return ParentService(
+        parent_student_repo=ParentStudentRepository(db),
+        lesson_repo=LessonRepository(db),
+        user_repo=UserRepository(db),
     )

@@ -18,11 +18,32 @@ class TutorStudentRepository(BaseRepository[TutorStudent]):
         result = await self.session.execute(query)
         return result.scalars().all()
 
+    async def get_by_student(self, student_id: int):
+        query = (
+            select(TutorStudent)
+            .where(TutorStudent.student_id == student_id)
+            .options(
+                selectinload(TutorStudent.student),
+                selectinload(TutorStudent.tutor),
+            )
+        )
+        result = await self.session.execute(query)
+        return result.scalars().all()
+
     async def get_by_tutor_and_student(self, tutor_id: int, student_id: int):
         query = select(TutorStudent).where(
             and_(
                 TutorStudent.tutor_id == tutor_id, TutorStudent.student_id == student_id
             )
+        )
+        result = await self.session.execute(query)
+        return result.scalar_one_or_none()
+
+    async def get_with_student(self, tutor_student_id: int):
+        query = (
+            select(TutorStudent)
+            .where(TutorStudent.id == tutor_student_id)
+            .options(selectinload(TutorStudent.student))
         )
         result = await self.session.execute(query)
         return result.scalar_one_or_none()
