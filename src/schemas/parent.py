@@ -1,6 +1,6 @@
 import datetime as dt
 from enum import Enum
-from typing import List, Optional
+from typing import Optional
 
 from pydantic import BaseModel, EmailStr, Field
 
@@ -14,6 +14,17 @@ class ParentAccessStatus(str, Enum):
 class ParentChatSenderRole(str, Enum):
     PARENT = "parent"
     TUTOR = "tutor"
+
+
+class ParentChildAdd(BaseModel):
+    email: str
+
+
+class ParentChildOut(BaseModel):
+    id: int
+    student_id: int
+    full_name: str
+    created_at: dt.datetime
 
 
 class ParentAccessRequestCreate(BaseModel):
@@ -54,31 +65,45 @@ class ParentLessonAttachmentOut(BaseModel):
 
 class ParentLessonSummary(BaseModel):
     id: int
-    access_id: int
+    access_id: Optional[int] = None
     tutor_student_id: int
     student_id: int
+    star_rewards_enabled: bool = False
     student_name: str
-    tutor_id: int
+    tutor_id: Optional[int] = None
     tutor_name: str
     date: Optional[dt.date] = None
     time: Optional[dt.time] = None
     topic: Optional[str] = None
     meet_link: Optional[str] = None
-    materials: List[ParentLessonAttachmentOut] = Field(default_factory=list)
-    homework_task_files: List[ParentLessonAttachmentOut] = Field(default_factory=list)
+    subject: Optional[str] = None
+    class_info: Optional[str] = None
+    materials: list[ParentLessonAttachmentOut] = Field(default_factory=list)
+    homework_task_files: list[ParentLessonAttachmentOut] = Field(default_factory=list)
+    parent_message_files: list[ParentLessonAttachmentOut] = Field(default_factory=list)
+    parent_comment: Optional[str] = None
     homework_deadline: Optional[dt.date] = None
+    homework_deadline_missed: bool = False
     homework_status: str
+    submission_file: Optional[ParentLessonAttachmentOut] = None
+    submission_files: list[ParentLessonAttachmentOut] = Field(default_factory=list)
+    checked_file: Optional[ParentLessonAttachmentOut] = None
+    checked_files: list[ParentLessonAttachmentOut] = Field(default_factory=list)
+    submission_comment: Optional[str] = None
+    student_comment: Optional[str] = None
+    submitted_at: Optional[dt.datetime] = None
+    homework_grade: Optional[float] = None
+    homework_stars: float = 0
 
 
 class ParentLessonListOut(BaseModel):
-    access: ParentAccessOut
-    upcoming: List[ParentLessonSummary] = Field(default_factory=list)
-    past: List[ParentLessonSummary] = Field(default_factory=list)
+    access: Optional[ParentAccessOut] = None
+    upcoming: list[ParentLessonSummary] = Field(default_factory=list)
+    past: list[ParentLessonSummary] = Field(default_factory=list)
 
 
 class ParentLessonDetail(ParentLessonSummary):
-    submission_file: Optional[ParentLessonAttachmentOut] = None
-    submission_comment: Optional[str] = None
+    pass
 
 
 class TutorParentAccessRequestOut(BaseModel):

@@ -5,12 +5,14 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.repositories.auth_identity import AuthIdentityRepository
+from src.core.repositories.bonus_task import BonusTaskRepository
 from src.core.repositories.file import FileRepository
 from src.core.repositories.group import GroupRepository
 from src.core.repositories.lesson import LessonRepository
 from src.core.repositories.lesson_file import LessonFileRepository
 from src.core.repositories.parent_access import ParentAccessRepository
 from src.core.repositories.parent_chat_message import ParentChatMessageRepository
+from src.core.repositories.parent_student import ParentStudentRepository
 from src.core.repositories.phone_auth_code import PhoneAuthCodeRepository
 from src.core.repositories.star_transaction import StarTransactionRepository
 from src.core.repositories.telegram_auth_session import TelegramAuthSessionRepository
@@ -98,6 +100,8 @@ async def get_tutor_service(db: AsyncSession = Depends(get_db_session)) -> Tutor
         user_repo=UserRepository(db),
         session=db,
         group_repo=GroupRepository(db),
+        file_repo=FileRepository(db),
+        bonus_task_repo=BonusTaskRepository(db),
     )
 
 
@@ -108,6 +112,8 @@ async def get_student_service(
         lesson_repo=LessonRepository(db),
         lesson_file_repo=LessonFileRepository(db),
         file_repo=FileRepository(db),
+        bonus_task_repo=BonusTaskRepository(db),
+        tutor_student_repo=TutorStudentRepository(db),
     )
 
 
@@ -115,6 +121,7 @@ async def get_parent_service(
     db: AsyncSession = Depends(get_db_session),
 ) -> ParentService:
     return ParentService(
+        parent_student_repo=ParentStudentRepository(db),
         parent_access_repo=ParentAccessRepository(db),
         parent_chat_message_repo=ParentChatMessageRepository(db),
         tutor_student_repo=TutorStudentRepository(db),

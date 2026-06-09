@@ -2,7 +2,7 @@ import uvicorn
 
 
 def main():
-    uvicorn.run("src.main:app")
+    uvicorn.run("main:app")
 
 
 if __name__ == "__main__":

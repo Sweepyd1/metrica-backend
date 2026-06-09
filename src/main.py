@@ -31,4 +31,4 @@ app.mount("/uploads", StaticFiles(directory=uploads_dir), name="uploads")
 
 
 if __name__ == "__main__":
-    uvicorn.run("src.main:app")
+    uvicorn.run("main:app")

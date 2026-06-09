@@ -10,12 +10,14 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.database.db_manager import db_manager
-from src.database.models import (
+from database.db_manager import db_manager
+from database.models import (
+    BonusTask,
     File,
     Lesson,
     LessonFile,
     LessonFileKind,
+    ParentStudent,
     SubmissionStatus,
     TutorStudent,
     User,
@@ -29,11 +31,15 @@ pwd_context = CryptContext(schemes=["argon2", "bcrypt"], deprecated="auto")
 async def reseed() -> None:
     async with db_manager.get_session() as session:
         # Remove only the fixed demo rows so the script can be re-run safely.
-        await session.execute(delete(LessonFile).where(LessonFile.id.in_([1, 2, 3, 4, 5])))
+        await session.execute(
+            delete(LessonFile).where(LessonFile.id.in_([1, 2, 3, 4, 5]))
+        )
+        await session.execute(delete(BonusTask).where(BonusTask.id.in_([1, 2])))
+        await session.execute(delete(ParentStudent).where(ParentStudent.id == 1))
         await session.execute(delete(Lesson).where(Lesson.id.in_([1, 2, 3])))
-        await session.execute(delete(File).where(File.id.in_([1, 2, 3, 4, 5])))
+        await session.execute(delete(File).where(File.id.in_([1, 2, 3, 4, 5, 6])))
         await session.execute(delete(TutorStudent).where(TutorStudent.id == 1))
-        await session.execute(delete(User).where(User.id.in_([1, 2])))
+        await session.execute(delete(User).where(User.id.in_([1, 2, 3])))
         await session.commit()
 
         tutor = User(
@@ -52,7 +58,15 @@ async def reseed() -> None:
             last_name="Student",
             role=UserRole.STUDENT,
         )
-        session.add_all([tutor, student])
+        parent = User(
+            id=3,
+            email="parent@example.com",
+            password=pwd_context.hash("test1234"),
+            first_name="Maria",
+            last_name="Parent",
+            role=UserRole.PARENT,
+        )
+        session.add_all([tutor, student, parent])
         await session.flush()
 
         link = TutorStudent(
@@ -61,8 +75,19 @@ async def reseed() -> None:
             student_id=student.id,
             subject="Mathematics",
             student_inf="7 grade, demo student for API testing",
+            star_rewards_enabled=True,
+            star_goal=25,
+            star_reward_title="Choose the topic for a bonus lesson",
         )
         session.add(link)
+        await session.flush()
+
+        parent_link = ParentStudent(
+            id=1,
+            parent_id=parent.id,
+            student_id=student.id,
+        )
+        session.add(parent_link)
         await session.flush()
 
         today = date.today()
@@ -137,6 +162,13 @@ async def reseed() -> None:
                 type="image/jpeg",
                 uploaded_by=student.id,
             ),
+            File(
+                id=6,
+                path="uploads/checked_linear.pdf",
+                filename="checked_linear.pdf",
+                type="application/pdf",
+                uploaded_by=tutor.id,
+            ),
         ]
         session.add_all(files)
         await session.flush()
@@ -160,7 +192,10 @@ async def reseed() -> None:
                 file_id=3,
                 kind=LessonFileKind.SUBMISSION,
                 status=SubmissionStatus.CHECKED,
+                checked_file_id=6,
                 comment="Good work. Recheck task 3 for sign mistakes.",
+                grade=4.5,
+                stars_awarded=4.5,
             ),
             LessonFile(
                 id=4,
@@ -178,10 +213,41 @@ async def reseed() -> None:
             ),
         ]
         session.add_all(lesson_files)
+        session.add_all(
+            [
+                BonusTask(
+                    id=1,
+                    tutor_student_id=link.id,
+                    title="Send homework before the deadline",
+                    description="Upload the solution at least one day early.",
+                    stars=2,
+                    due_date=today + timedelta(days=1),
+                    is_completed=False,
+                ),
+                BonusTask(
+                    id=2,
+                    tutor_student_id=link.id,
+                    title="Solve the extra challenge",
+                    description="Complete the optional task from the lesson notes.",
+                    stars=3,
+                    due_date=today + timedelta(days=5),
+                    is_completed=True,
+                    completed_at=datetime.now(),
+                ),
+            ]
+        )
         await session.commit()
 
         # Sync PostgreSQL sequences after inserting explicit ids.
-        for table_name in ["users", "tutor_student", "lesson", "file", "lesson_file"]:
+        for table_name in [
+            "users",
+            "tutor_student",
+            "lesson",
+            "file",
+            "lesson_file",
+            "bonus_task",
+            "parent_student",
+        ]:
             await session.execute(
                 text(
                     f"SELECT setval(pg_get_serial_sequence('{table_name}', 'id'), "
@@ -193,6 +259,7 @@ async def reseed() -> None:
     print("Seed completed.")
     print("Tutor: tutor@example.com / test1234")
     print("Student (id=2): student@example.com / test1234")
+    print("Parent: parent@example.com / test1234")
 
 
 if __name__ == "__main__":

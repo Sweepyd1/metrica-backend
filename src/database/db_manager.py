@@ -69,5 +69,4 @@ class DatabaseManager:
                     await session.close()
         else:
             yield existing_session
-
 db_manager = DatabaseManager(cfg.database.async_url)

@@ -6,18 +6,29 @@ from typing import List
 from fastapi import APIRouter, Depends, File, Query, UploadFile, status
 
 from src.api.dependencies import get_current_tutor, get_db_session, get_tutor_service
+from src.core.files import build_upload_path, validate_upload_file
+from src.core.repositories.file import FileRepository
 from src.core.service.tutor import TutorService
+from src.database.models import User
+from src.schemas.gamification import (
+    BonusTaskCreate,
+    BonusTaskOut,
+    BonusTaskUpdate,
+    GamificationOut,
+    GamificationSettingsUpdate,
+)
 from src.schemas.group import GroupCreate, GroupDetailOut, GroupOut, GroupStudentsUpdate
 from src.schemas.parent import (
-    ParentChatMessageCreate,
-    ParentChatMessageOut,
     ParentAccessReview,
     ParentAccessStatus,
+    ParentChatMessageCreate,
+    ParentChatMessageOut,
     TutorParentAccessRequestOut,
 )
 from src.schemas.tutor import (
     StudentAdd,
     StudentOut,
+    TutorStudentUpdate,
     LessonCreate,
     LessonUpdate,
     StarTransactionCreate,
@@ -29,11 +40,9 @@ from src.schemas.tutor import (
     LessonOut,
     SubmissionOut,
     SubmissionCheck,
+    ParentLessonMessageUpdate,
 )
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from src.database.models import User
-from src.core.repositories.file import FileRepository
 
 router = APIRouter(prefix="/tutor", tags=["tutor"])
 
@@ -44,6 +53,7 @@ def to_lesson_out(lesson) -> LessonOut:
         tutor_student_id=lesson.tutor_student_id,
         date=lesson.l_date,
         time=lesson.l_time,
+        subject=lesson.subject,
         topic=lesson.topic,
         meet_link=lesson.meet_link,
         homework_done=lesson.homework_done,
@@ -62,12 +72,19 @@ async def add_student(
     return StudentOut(
         id=link.id,
         student_id=student.id,
+        email=student.email,
+        first_name=student.first_name,
+        last_name=student.last_name,
         full_name=f"{student.first_name} {student.last_name or ''}",
         subject=link.subject,
         class_info=link.student_inf,
         star_balance=link.star_balance,
         last_submission_id=None,
         last_submission_status="none",
+        star_rewards_enabled=link.star_rewards_enabled,
+        star_goal=link.star_goal,
+        star_reward_title=link.star_reward_title,
+        earned_stars=0,
     )
 
 
@@ -152,6 +169,25 @@ async def create_parent_access_message(
     service: TutorService = Depends(get_tutor_service),
 ):
     return await service.send_parent_access_message(tutor.id, access_id, data)
+
+
+@router.patch("/students/{tutor_student_id}", response_model=StudentOut)
+async def update_student(
+    tutor_student_id: int,
+    data: TutorStudentUpdate,
+    tutor: User = Depends(get_current_tutor),
+    service: TutorService = Depends(get_tutor_service),
+):
+    return await service.update_student(tutor.id, tutor_student_id, data)
+
+
+@router.delete("/students/{tutor_student_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_student(
+    tutor_student_id: int,
+    tutor: User = Depends(get_current_tutor),
+    service: TutorService = Depends(get_tutor_service),
+):
+    await service.delete_student(tutor.id, tutor_student_id)
 
 
 @router.get(
@@ -263,12 +299,31 @@ async def lesson_detail(
     return await service.get_lesson_detail(tutor.id, lesson_id)
 
 
+@router.post("/lessons/{lesson_id}/parent-message", response_model=TutorLessonDetail)
+async def update_parent_lesson_message(
+    lesson_id: int,
+    data: ParentLessonMessageUpdate,
+    tutor: User = Depends(get_current_tutor),
+    service: TutorService = Depends(get_tutor_service),
+):
+    return await service.update_parent_lesson_message(tutor.id, lesson_id, data)
+
+
 @router.get("/submissions/pending", response_model=List[SubmissionOut])
 async def pending_submissions(
     tutor: User = Depends(get_current_tutor),
     service: TutorService = Depends(get_tutor_service),
 ):
     return await service.get_pending_submissions(tutor.id)
+
+
+@router.get("/submissions", response_model=List[SubmissionOut])
+async def list_submissions(
+    status_filter: str | None = Query(default=None, alias="status"),
+    tutor: User = Depends(get_current_tutor),
+    service: TutorService = Depends(get_tutor_service),
+):
+    return await service.get_submissions(tutor.id, status_filter)
 
 
 @router.post("/submissions/{submission_id}/check", response_model=SubmissionOut)
@@ -278,18 +333,56 @@ async def check_submission(
     tutor: User = Depends(get_current_tutor),
     service: TutorService = Depends(get_tutor_service),
 ):
-    sub = await service.check_submission(tutor.id, submission_id, check_data.comment)
-    lesson = sub.lesson
-    student = lesson.tutor_student.student
-    return SubmissionOut(
-        id=sub.id,
-        student=f"{student.first_name} {student.last_name or ''}",
-        lesson_date=lesson.l_date,
-        lesson_topic=lesson.topic,
-        file_url=sub.file.path if sub.file else None,
-        status=sub.status.value,
-        comment=sub.comment,
-    )
+    return await service.check_submission(tutor.id, submission_id, check_data)
+
+
+@router.get(
+    "/students/{tutor_student_id}/gamification",
+    response_model=GamificationOut,
+)
+async def student_gamification(
+    tutor_student_id: int,
+    tutor: User = Depends(get_current_tutor),
+    service: TutorService = Depends(get_tutor_service),
+):
+    return await service.get_student_gamification(tutor.id, tutor_student_id)
+
+
+@router.patch(
+    "/students/{tutor_student_id}/gamification",
+    response_model=GamificationOut,
+)
+async def update_student_gamification(
+    tutor_student_id: int,
+    data: GamificationSettingsUpdate,
+    tutor: User = Depends(get_current_tutor),
+    service: TutorService = Depends(get_tutor_service),
+):
+    return await service.update_student_gamification(tutor.id, tutor_student_id, data)
+
+
+@router.post(
+    "/students/{tutor_student_id}/bonus-tasks",
+    response_model=BonusTaskOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_bonus_task(
+    tutor_student_id: int,
+    data: BonusTaskCreate,
+    tutor: User = Depends(get_current_tutor),
+    service: TutorService = Depends(get_tutor_service),
+):
+    return await service.create_bonus_task(tutor.id, tutor_student_id, data)
+
+
+@router.patch("/bonus-tasks/{task_id}", response_model=BonusTaskOut)
+async def update_bonus_task(
+    task_id: int,
+    data: BonusTaskUpdate,
+    tutor: User = Depends(get_current_tutor),
+    service: TutorService = Depends(get_tutor_service),
+):
+    return await service.update_bonus_task(tutor.id, task_id, data)
 
 
 # Загрузка файла (перед созданием занятия)
@@ -299,8 +392,8 @@ async def upload_file(
     tutor: User = Depends(get_current_tutor),
     db: AsyncSession = Depends(get_db_session),
 ):
-    # Сохраняем файл на диск
-    file_path = f"uploads/{tutor.id}_{file.filename}"
+    original_filename = validate_upload_file(file)
+    file_path = build_upload_path(tutor.id, original_filename)
     os.makedirs("uploads", exist_ok=True)
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
@@ -308,12 +401,11 @@ async def upload_file(
     file_repo = FileRepository(db)
     db_file = await file_repo.create(
         path=file_path,
-        filename=file.filename,
+        filename=original_filename,
         type=file.content_type,
         uploaded_by=tutor.id,
     )
     return {"file_id": db_file.id}
-
 
 @router.post("/groups", response_model=GroupOut)
 async def create_group(
