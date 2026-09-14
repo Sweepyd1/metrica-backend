@@ -1,0 +1,12 @@
+.git
+.gitignore
+.venv
+__pycache__
+**/__pycache__
+*.pyc
+.env
+.env.*
+uploads/
+logs/
+node_modules
+package-lock.json
