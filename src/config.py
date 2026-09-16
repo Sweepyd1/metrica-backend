@@ -105,7 +105,11 @@ class AuthConfig(ValidatedConfigModel):
     oauth_flow_cookie_prefix: str = "oauth_flow"
     oauth_flow_ttl_seconds: int = 600
     cookie_secure: bool = Field(
-        default_factory=lambda: get_app_env() == "production"
+        default_factory=lambda: os.getenv(
+            "AUTH_COOKIE_SECURE",
+            "true" if get_app_env() == "production" else "false",
+        ).lower()
+        == "true"
     )
     cookie_samesite: str = "lax"
     cookie_domain: Optional[str] = None
