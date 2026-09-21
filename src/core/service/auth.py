@@ -293,7 +293,6 @@ class AuthService:
         try:
             async with httpx.AsyncClient(
                 timeout=cfg.auth.oauth_http_timeout_seconds,
-                proxy=cfg.auth.outbound_proxy_url,
             ) as client:
                 response = await client.request(
                     method=method,
@@ -623,7 +622,6 @@ class AuthService:
         try:
             async with httpx.AsyncClient(
                 timeout=cfg.auth.oauth_http_timeout_seconds,
-                proxy=cfg.auth.outbound_proxy_url,
             ) as client:
                 response = await client.post(url, json=data)
         except httpx.HTTPError as exc:
