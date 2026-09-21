@@ -1171,7 +1171,7 @@ class AuthService:
         if not user.email:
             return
         token = secrets.token_urlsafe(32)
-        expires_at = datetime.now(timezone.utc) + timedelta(
+        expires_at = datetime.now() + timedelta(
             hours=cfg.email.verification_ttl_hours
         )
         await self.email_verification_repo.create(
@@ -1189,11 +1189,8 @@ class AuthService:
         record = await self.email_verification_repo.get_by_token(token)
         if not record:
             raise HTTPException(status_code=400, detail="Неверная ссылка подтверждения")
-        now = datetime.now(timezone.utc)
-        expires_at = record.expires_at
-        if expires_at.tzinfo is None:
-            expires_at = expires_at.replace(tzinfo=timezone.utc)
-        if record.used_at is not None or expires_at < now:
+        now = datetime.now()
+        if record.used_at is not None or record.expires_at < now:
             raise HTTPException(
                 status_code=400, detail="Ссылка подтверждения устарела или уже использована"
             )
@@ -1228,9 +1225,7 @@ class AuthService:
                 raise HTTPException(status_code=404, detail="Ученик не найден")
 
         token = secrets.token_urlsafe(24)
-        expires_at = datetime.now(timezone.utc) + timedelta(
-            days=cfg.email.invite_ttl_days
-        )
+        expires_at = datetime.now() + timedelta(days=cfg.email.invite_ttl_days)
         invite = await self.invite_repo.create(
             token=token,
             tutor_id=tutor_id,
@@ -1251,11 +1246,8 @@ class AuthService:
         invite = await self.invite_repo.get_by_token(token)
         if not invite:
             raise HTTPException(status_code=404, detail="Приглашение не найдено")
-        now = datetime.now(timezone.utc)
-        expires_at = invite.expires_at
-        if expires_at.tzinfo is None:
-            expires_at = expires_at.replace(tzinfo=timezone.utc)
-        if invite.used_at is not None or expires_at < now:
+        now = datetime.now()
+        if invite.used_at is not None or invite.expires_at < now:
             raise HTTPException(
                 status_code=410, detail="Приглашение больше не действительно"
             )
@@ -1315,7 +1307,7 @@ class AuthService:
                 reviewed_by=invite.tutor_id,
             )
 
-        invite.used_at = datetime.now(timezone.utc)
+        invite.used_at = datetime.now()
         invite.used_by_user_id = user.id
 
         await self.commit_and_refresh(user)
