@@ -1,9 +1,8 @@
-# core/repositories/group.py
 from sqlalchemy import select, delete, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 
-from database.models import Group, GroupStudent, User
+from src.database.models import Group, GroupStudent, User
 
 
 class GroupRepository:

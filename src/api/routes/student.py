@@ -3,12 +3,12 @@ import shutil
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 
-from api.dependencies import get_current_student, get_student_service
-from core.files import build_upload_path, validate_upload_file
-from core.service.student import StudentService
-from database.models import User
-from schemas.gamification import GamificationOut
-from schemas.student import (
+from src.api.dependencies import get_current_student, get_student_service
+from src.core.files import build_upload_path, validate_upload_file
+from src.core.service.student import StudentService
+from src.database.models import User
+from src.schemas.gamification import GamificationOut
+from src.schemas.student import (
     HomeworkSubmissionOut,
     StudentLessonDetail,
     StudentLessonListOut,

@@ -1,8 +1,8 @@
 from sqlalchemy import and_, select
 from sqlalchemy.orm import selectinload
 
-from core.repositories.base import BaseRepository
-from database.models import ParentStudent
+from src.core.repositories.base import BaseRepository
+from src.database.models import ParentStudent
 
 
 class ParentStudentRepository(BaseRepository[ParentStudent]):

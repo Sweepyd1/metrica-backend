@@ -18,9 +18,9 @@ sys.path.insert(0, str(src_root))
 sys.path.insert(0, str(project_root))
 
 # Импортируем конфиг и базовый класс моделей
-from config import cfg
-from database.db_manager import Base
-from database.models import *
+from src.config import cfg
+from src.database.models import Base
+from src.database.models import *
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

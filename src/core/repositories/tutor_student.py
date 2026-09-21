@@ -1,8 +1,8 @@
 from typing import List
 from sqlalchemy import select, and_
 from sqlalchemy.orm import selectinload
-from database.models import TutorStudent
-from core.repositories.base import BaseRepository
+from src.database.models import TutorStudent
+from src.core.repositories.base import BaseRepository
 
 
 class TutorStudentRepository(BaseRepository[TutorStudent]):
@@ -36,6 +36,25 @@ class TutorStudentRepository(BaseRepository[TutorStudent]):
                 TutorStudent.tutor_id == tutor_id, TutorStudent.student_id == student_id
             )
         )
+        result = await self.session.execute(query)
+        return result.scalar_one_or_none()
+
+    async def get_for_tutor(
+        self, tutor_id: int, tutor_student_id: int, *, for_update: bool = False
+    ):
+        query = (
+            select(TutorStudent)
+            .where(
+                and_(
+                    TutorStudent.id == tutor_student_id,
+                    TutorStudent.tutor_id == tutor_id,
+                )
+            )
+            .options(selectinload(TutorStudent.student))
+        )
+        if for_update:
+            query = query.with_for_update()
+
         result = await self.session.execute(query)
         return result.scalar_one_or_none()
 

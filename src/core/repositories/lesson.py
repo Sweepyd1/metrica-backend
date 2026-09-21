@@ -1,9 +1,9 @@
 import datetime as dt
 
-from sqlalchemy import and_, desc, select
+from sqlalchemy import and_, asc, desc, nullslast, select
 from sqlalchemy.orm import selectinload
-from database.models import Lesson, LessonFile, ParentStudent, TutorStudent
-from core.repositories.base import BaseRepository
+from src.database.models import Lesson, LessonFile, ParentStudent, TutorStudent
+from src.core.repositories.base import BaseRepository
 
 
 class LessonRepository(BaseRepository[Lesson]):
@@ -102,6 +102,63 @@ class LessonRepository(BaseRepository[Lesson]):
         )
         result = await self.session.execute(query)
         return result.scalars().all()
+
+    async def get_by_tutor_student(
+        self, tutor_id: int, tutor_student_id: int | None = None
+    ):
+        if tutor_student_id is None:
+            tutor_student_id = tutor_id
+            query = select(Lesson).where(Lesson.tutor_student_id == tutor_student_id)
+        else:
+            query = (
+                select(Lesson)
+                .join(TutorStudent, Lesson.tutor_student_id == TutorStudent.id)
+                .where(
+                    and_(
+                        TutorStudent.tutor_id == tutor_id,
+                        Lesson.tutor_student_id == tutor_student_id,
+                    )
+                )
+            )
+        query = (
+            query.options(
+                selectinload(Lesson.tutor_student).selectinload(TutorStudent.student),
+                selectinload(Lesson.tutor_student).selectinload(TutorStudent.tutor),
+                selectinload(Lesson.lesson_files).selectinload(LessonFile.file),
+                selectinload(Lesson.lesson_files).selectinload(
+                    LessonFile.checked_file
+                ),
+            )
+            .order_by(
+                nullslast(asc(Lesson.l_date)),
+                nullslast(asc(Lesson.l_time)),
+                asc(Lesson.id),
+            )
+        )
+        result = await self.session.execute(query)
+        return result.scalars().all()
+
+    async def get_tutor_student_lesson(
+        self, tutor_id: int, tutor_student_id: int, lesson_id: int
+    ):
+        query = (
+            select(Lesson)
+            .join(TutorStudent, Lesson.tutor_student_id == TutorStudent.id)
+            .where(
+                and_(
+                    TutorStudent.tutor_id == tutor_id,
+                    Lesson.tutor_student_id == tutor_student_id,
+                    Lesson.id == lesson_id,
+                )
+            )
+            .options(
+                selectinload(Lesson.tutor_student).selectinload(TutorStudent.student),
+                selectinload(Lesson.tutor_student).selectinload(TutorStudent.tutor),
+                selectinload(Lesson.lesson_files).selectinload(LessonFile.file),
+            )
+        )
+        result = await self.session.execute(query)
+        return result.scalar_one_or_none()
 
     async def get_tutor_lesson(self, tutor_id: int, lesson_id: int):
         query = (

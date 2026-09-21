@@ -2,14 +2,14 @@ from datetime import date, datetime, time
 
 from fastapi import HTTPException, status
 
-from core.repositories.bonus_task import BonusTaskRepository
-from core.repositories.file import FileRepository
-from core.repositories.lesson import LessonRepository
-from core.repositories.lesson_file import LessonFileRepository
-from core.repositories.tutor_student import TutorStudentRepository
-from database.models import Lesson, LessonFile, LessonFileKind, SubmissionStatus
-from schemas.gamification import BonusTaskOut, GamificationOut
-from schemas.student import (
+from src.core.repositories.bonus_task import BonusTaskRepository
+from src.core.repositories.file import FileRepository
+from src.core.repositories.lesson import LessonRepository
+from src.core.repositories.lesson_file import LessonFileRepository
+from src.core.repositories.tutor_student import TutorStudentRepository
+from src.database.models import Lesson, LessonFile, LessonFileKind, SubmissionStatus
+from src.schemas.gamification import BonusTaskOut, GamificationOut
+from src.schemas.student import (
     HomeworkSubmissionOut,
     LessonAttachmentOut,
     StudentLessonDetail,

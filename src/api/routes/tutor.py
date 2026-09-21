@@ -5,34 +5,52 @@ from typing import List
 
 from fastapi import APIRouter, Depends, File, Query, UploadFile, status
 
-from api.dependencies import get_current_tutor, get_db_session, get_tutor_service
-from core.files import build_upload_path, validate_upload_file
-from core.service.tutor import TutorService
-from schemas.gamification import (
+from src.api.dependencies import (
+    get_auth_service,
+    get_current_tutor,
+    get_db_session,
+    get_tutor_service,
+)
+from src.config import cfg
+from src.core.files import build_upload_path, validate_upload_file
+from src.core.repositories.file import FileRepository
+from src.core.service.auth import AuthService
+from src.core.service.tutor import TutorService
+from src.database.models import User
+from src.schemas.user import InviteCreateRequest, InviteOut, InviteRole
+from src.schemas.gamification import (
     BonusTaskCreate,
     BonusTaskOut,
     BonusTaskUpdate,
     GamificationOut,
     GamificationSettingsUpdate,
 )
-from schemas.group import GroupCreate, GroupDetailOut, GroupOut, GroupStudentsUpdate
-from schemas.tutor import (
+from src.schemas.group import GroupCreate, GroupDetailOut, GroupOut, GroupStudentsUpdate
+from src.schemas.parent import (
+    ParentAccessReview,
+    ParentAccessStatus,
+    ParentChatMessageCreate,
+    ParentChatMessageOut,
+    TutorParentAccessRequestOut,
+)
+from src.schemas.tutor import (
     StudentAdd,
     StudentOut,
     TutorStudentUpdate,
     LessonCreate,
     LessonUpdate,
+    StarTransactionCreate,
+    StarTransactionOut,
     TutorLessonDetail,
     TutorLessonListOut,
+    TutorLessonProgressTreeOut,
+    TutorStudentStarsOut,
     LessonOut,
     SubmissionOut,
     SubmissionCheck,
     ParentLessonMessageUpdate,
 )
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from database.models import User
-from core.repositories.file import FileRepository
 
 router = APIRouter(prefix="/tutor", tags=["tutor"])
 
@@ -68,6 +86,7 @@ async def add_student(
         full_name=f"{student.first_name} {student.last_name or ''}",
         subject=link.subject,
         class_info=link.student_inf,
+        star_balance=link.star_balance,
         last_submission_id=None,
         last_submission_status="none",
         star_rewards_enabled=link.star_rewards_enabled,
@@ -77,12 +96,129 @@ async def add_student(
     )
 
 
+@router.post("/students/invite", response_model=InviteOut)
+async def invite_student(
+    data: InviteCreateRequest,
+    tutor: User = Depends(get_current_tutor),
+    auth_service: AuthService = Depends(get_auth_service),
+):
+    """Одноразовая ссылка регистрации для нового ученика этого репетитора."""
+    invite = await auth_service.create_invite(
+        tutor_id=tutor.id,
+        role=InviteRole.STUDENT,
+        invitee_email=data.invitee_email,
+    )
+    return InviteOut(
+        token=invite.token,
+        url=f"{cfg.email.frontend_base_url}/register/invite/{invite.token}",
+        role=InviteRole.STUDENT,
+        expires_at=invite.expires_at,
+    )
+
+
+@router.post("/students/{tutor_student_id}/invite-parent", response_model=InviteOut)
+async def invite_parent(
+    tutor_student_id: int,
+    data: InviteCreateRequest,
+    tutor: User = Depends(get_current_tutor),
+    auth_service: AuthService = Depends(get_auth_service),
+):
+    """Одноразовая ссылка регистрации для родителя конкретного ученика."""
+    invite = await auth_service.create_invite(
+        tutor_id=tutor.id,
+        role=InviteRole.PARENT,
+        tutor_student_id=tutor_student_id,
+        invitee_email=data.invitee_email,
+    )
+    return InviteOut(
+        token=invite.token,
+        url=f"{cfg.email.frontend_base_url}/register/invite/{invite.token}",
+        role=InviteRole.PARENT,
+        expires_at=invite.expires_at,
+    )
+
+
 @router.get("/students", response_model=List[StudentOut])
 async def list_students(
     tutor: User = Depends(get_current_tutor),
     service: TutorService = Depends(get_tutor_service),
 ):
     return await service.get_my_students(tutor.id)
+
+
+@router.get(
+    "/parent-access-requests",
+    response_model=List[TutorParentAccessRequestOut],
+)
+async def list_parent_access_requests(
+    status_filter: ParentAccessStatus | None = Query(default=None, alias="status"),
+    tutor: User = Depends(get_current_tutor),
+    service: TutorService = Depends(get_tutor_service),
+):
+    return await service.get_parent_access_requests(
+        tutor.id,
+        status_filter=status_filter.value if status_filter else None,
+    )
+
+
+@router.post(
+    "/parent-access-requests/{request_id}/approve",
+    response_model=TutorParentAccessRequestOut,
+)
+async def approve_parent_access_request(
+    request_id: int,
+    data: ParentAccessReview,
+    tutor: User = Depends(get_current_tutor),
+    service: TutorService = Depends(get_tutor_service),
+):
+    return await service.approve_parent_access_request(
+        tutor.id,
+        request_id,
+        data.comment,
+    )
+
+
+@router.post(
+    "/parent-access-requests/{request_id}/reject",
+    response_model=TutorParentAccessRequestOut,
+)
+async def reject_parent_access_request(
+    request_id: int,
+    data: ParentAccessReview,
+    tutor: User = Depends(get_current_tutor),
+    service: TutorService = Depends(get_tutor_service),
+):
+    return await service.reject_parent_access_request(
+        tutor.id,
+        request_id,
+        data.comment,
+    )
+
+
+@router.get(
+    "/parent-accesses/{access_id}/messages",
+    response_model=List[ParentChatMessageOut],
+)
+async def list_parent_access_messages(
+    access_id: int,
+    tutor: User = Depends(get_current_tutor),
+    service: TutorService = Depends(get_tutor_service),
+):
+    return await service.get_parent_access_messages(tutor.id, access_id)
+
+
+@router.post(
+    "/parent-accesses/{access_id}/messages",
+    response_model=ParentChatMessageOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_parent_access_message(
+    access_id: int,
+    data: ParentChatMessageCreate,
+    tutor: User = Depends(get_current_tutor),
+    service: TutorService = Depends(get_tutor_service),
+):
+    return await service.send_parent_access_message(tutor.id, access_id, data)
 
 
 @router.patch("/students/{tutor_student_id}", response_model=StudentOut)
@@ -102,6 +238,61 @@ async def delete_student(
     service: TutorService = Depends(get_tutor_service),
 ):
     await service.delete_student(tutor.id, tutor_student_id)
+
+
+@router.get(
+    "/students/{tutor_student_id}/progress-tree",
+    response_model=TutorLessonProgressTreeOut,
+)
+async def student_progress_tree(
+    tutor_student_id: int,
+    tutor: User = Depends(get_current_tutor),
+    service: TutorService = Depends(get_tutor_service),
+):
+    return await service.get_student_progress_tree(tutor.id, tutor_student_id)
+
+
+@router.get(
+    "/students/{tutor_student_id}/stars",
+    response_model=TutorStudentStarsOut,
+)
+async def student_stars(
+    tutor_student_id: int,
+    limit: int = Query(default=50, ge=1, le=200),
+    tutor: User = Depends(get_current_tutor),
+    service: TutorService = Depends(get_tutor_service),
+):
+    return await service.get_student_stars(
+        tutor.id, tutor_student_id=tutor_student_id, limit=limit
+    )
+
+
+@router.post(
+    "/students/{tutor_student_id}/stars/accrue",
+    response_model=StarTransactionOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def accrue_student_stars(
+    tutor_student_id: int,
+    data: StarTransactionCreate,
+    tutor: User = Depends(get_current_tutor),
+    service: TutorService = Depends(get_tutor_service),
+):
+    return await service.accrue_stars(tutor.id, tutor_student_id, data)
+
+
+@router.post(
+    "/students/{tutor_student_id}/stars/write-off",
+    response_model=StarTransactionOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def write_off_student_stars(
+    tutor_student_id: int,
+    data: StarTransactionCreate,
+    tutor: User = Depends(get_current_tutor),
+    service: TutorService = Depends(get_tutor_service),
+):
+    return await service.write_off_stars(tutor.id, tutor_student_id, data)
 
 
 @router.post("/lessons", response_model=LessonOut)

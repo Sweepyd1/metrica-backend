@@ -1,8 +1,8 @@
 from sqlalchemy import and_, select
 from sqlalchemy.orm import selectinload
 
-from core.repositories.base import BaseRepository
-from database.models import BonusTask, TutorStudent
+from src.core.repositories.base import BaseRepository
+from src.database.models import BonusTask, TutorStudent
 
 
 class BonusTaskRepository(BaseRepository[BonusTask]):

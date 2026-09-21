@@ -1,16 +1,16 @@
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ai_checker.integration import (
+from src.ai_checker.integration import (
     get_ai_review_history,
     get_ai_review_progress,
     get_ai_review_state,
     run_ai_review,
     start_ai_review,
 )
-from ai_checker.schemas import AiHomeworkHistoryItemOut, AiProgressReportOut, AiReviewStateOut
-from api.dependencies import get_current_tutor, get_db_session
-from database.models import User
+from src.ai_checker.schemas import AiHomeworkHistoryItemOut, AiProgressReportOut, AiReviewStateOut
+from src.api.dependencies import get_current_tutor, get_db_session
+from src.database.models import User
 
 
 router = APIRouter(prefix="/tutor", tags=["ai-homework-review"])

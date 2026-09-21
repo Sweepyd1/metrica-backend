@@ -2,7 +2,7 @@ import os
 import json
 from pathlib import Path
 from typing import List, Optional, Any
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from urllib.parse import quote_plus
 from dotenv import load_dotenv
@@ -11,7 +11,28 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 
-class DatabaseConfig(BaseModel):
+def get_app_env() -> str:
+    return os.getenv("APP_ENV", "development").lower()
+
+
+def get_dev_jwt_secret() -> str:
+    return "dev-jwt-secret-key-for-local-frontend-only-change-me"
+
+
+def get_jwt_secret_key() -> str:
+    configured_secret = os.getenv("JWT_SECRET_KEY", "").strip()
+    if configured_secret:
+        return configured_secret
+    if get_app_env() != "production":
+        return get_dev_jwt_secret()
+    return ""
+
+
+class ValidatedConfigModel(BaseModel):
+    model_config = ConfigDict(validate_default=True)
+
+
+class DatabaseConfig(ValidatedConfigModel):
     host: str = "localhost"
     port: int = 5432
     database: str = "metrica"
@@ -35,7 +56,7 @@ class DatabaseConfig(BaseModel):
         return f"postgresql+asyncpg://{self.user}:{encoded_password}@{self.host}:{self.port}/{self.database}"
 
 
-class AppConfig(BaseModel):
+class AppConfig(ValidatedConfigModel):
     env: str = "development"
     name: str = "Music Store API"
     version: str = "1.0.0"
@@ -62,8 +83,8 @@ class AppConfig(BaseModel):
         return v
 
 
-class SecurityConfig(BaseModel):
-    jwt_secret_key: str = Field(default_factory=lambda: os.getenv("JWT_SECRET_KEY", ""))
+class SecurityConfig(ValidatedConfigModel):
+    jwt_secret_key: str = Field(default_factory=get_jwt_secret_key)
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 3000
     refresh_token_expire_days: int = 70
@@ -78,7 +99,101 @@ class SecurityConfig(BaseModel):
         return v
 
 
-class LoggingConfig(BaseModel):
+class AuthConfig(ValidatedConfigModel):
+    access_cookie_name: str = "access_token"
+    refresh_cookie_name: str = "refresh_token"
+    oauth_flow_cookie_prefix: str = "oauth_flow"
+    oauth_flow_ttl_seconds: int = 600
+    cookie_secure: bool = Field(
+        default_factory=lambda: os.getenv(
+            "AUTH_COOKIE_SECURE",
+            "true" if get_app_env() == "production" else "false",
+        ).lower()
+        == "true"
+    )
+    cookie_samesite: str = "lax"
+    cookie_domain: Optional[str] = None
+    phone_code_ttl_seconds: int = 300
+    phone_code_length: int = 6
+    phone_code_attempt_limit: int = 5
+    phone_code_resend_seconds: int = 60
+    debug_return_phone_code: bool = Field(
+        default_factory=lambda: os.getenv(
+            "AUTH_DEBUG_RETURN_PHONE_CODE",
+            "true" if get_app_env() != "production" else "false",
+        ).lower()
+        == "true"
+    )
+    telegram_bot_token: str = Field(
+        default_factory=lambda: os.getenv("AUTH_TELEGRAM_BOT_TOKEN", "")
+    )
+    telegram_bot_username: str = Field(
+        default_factory=lambda: os.getenv("AUTH_TELEGRAM_BOT_USERNAME", "")
+    )
+    telegram_auth_max_age_seconds: int = 86400
+    telegram_message_auth_ttl_seconds: int = 600
+    telegram_message_code_length: int = 6
+    telegram_api_base_url: str = "https://api.telegram.org"
+    yandex_client_id: str = Field(
+        default_factory=lambda: os.getenv("AUTH_YANDEX_CLIENT_ID", "")
+    )
+    yandex_client_secret: str = Field(
+        default_factory=lambda: os.getenv("AUTH_YANDEX_CLIENT_SECRET", "")
+    )
+    yandex_redirect_uri: str = Field(
+        default_factory=lambda: os.getenv("AUTH_YANDEX_REDIRECT_URI", "")
+    )
+    yandex_scope: str = Field(
+        default_factory=lambda: os.getenv("AUTH_YANDEX_SCOPE", "")
+    )
+    yandex_authorize_url: str = "https://oauth.yandex.com/authorize"
+    yandex_token_url: str = "https://oauth.yandex.com/token"
+    yandex_user_info_url: str = "https://login.yandex.ru/info"
+    vk_client_id: str = Field(
+        default_factory=lambda: os.getenv("AUTH_VK_CLIENT_ID", "")
+    )
+    vk_client_secret: str = Field(
+        default_factory=lambda: os.getenv("AUTH_VK_CLIENT_SECRET", "")
+    )
+    vk_redirect_uri: str = Field(
+        default_factory=lambda: os.getenv("AUTH_VK_REDIRECT_URI", "")
+    )
+    vk_scope: str = Field(
+        default_factory=lambda: os.getenv("AUTH_VK_SCOPE", "email phone")
+    )
+    vk_authorize_url: str = "https://id.vk.ru/authorize"
+    vk_token_url: str = "https://id.vk.ru/oauth2/auth"
+    vk_user_info_url: str = "https://id.vk.ru/oauth2/user_info"
+    oauth_http_timeout_seconds: float = 15.0
+
+    @field_validator("cookie_samesite")
+    def validate_cookie_samesite(cls, v: str) -> str:
+        allowed = {"lax", "strict", "none"}
+        normalized = v.lower()
+        if normalized not in allowed:
+            raise ValueError("cookie_samesite must be one of: lax, strict, none")
+        return normalized
+
+    @field_validator("phone_code_length")
+    def validate_phone_code_length(cls, v: int) -> int:
+        if v < 4 or v > 8:
+            raise ValueError("phone_code_length must be between 4 and 8")
+        return v
+
+    @field_validator("telegram_message_code_length")
+    def validate_telegram_message_code_length(cls, v: int) -> int:
+        if v < 4 or v > 8:
+            raise ValueError("telegram_message_code_length must be between 4 and 8")
+        return v
+
+    @field_validator("oauth_flow_ttl_seconds")
+    def validate_oauth_flow_ttl_seconds(cls, v: int) -> int:
+        if v < 60:
+            raise ValueError("oauth_flow_ttl_seconds must be at least 60")
+        return v
+
+
+class LoggingConfig(ValidatedConfigModel):
     level: str = "INFO"
     format: str = "json"  # json или console
     folder: Path = Path("logs")
@@ -99,7 +214,37 @@ class LoggingConfig(BaseModel):
         return v.upper()
 
 
-class AdminConfig(BaseModel):
+class EmailConfig(ValidatedConfigModel):
+    """SMTP для писем подтверждения почты и приглашений"""
+
+    smtp_host: str = Field(default_factory=lambda: os.getenv("EMAIL_SMTP_HOST", ""))
+    smtp_port: int = Field(
+        default_factory=lambda: int(os.getenv("EMAIL_SMTP_PORT", "465"))
+    )
+    smtp_user: str = Field(default_factory=lambda: os.getenv("EMAIL_SMTP_USER", ""))
+    smtp_password: str = Field(
+        default_factory=lambda: os.getenv("EMAIL_SMTP_PASSWORD", "")
+    )
+    smtp_from: str = Field(default_factory=lambda: os.getenv("EMAIL_SMTP_FROM", ""))
+    smtp_use_ssl: bool = Field(
+        default_factory=lambda: os.getenv("EMAIL_SMTP_USE_SSL", "true").lower()
+        == "true"
+    )
+    verification_ttl_hours: int = 24
+    invite_ttl_days: int = 14
+    # Базовый URL фронтенда для ссылок в письмах (подтверждение, инвайты)
+    frontend_base_url: str = Field(
+        default_factory=lambda: os.getenv(
+            "EMAIL_FRONTEND_BASE_URL", "http://localhost:5173"
+        )
+    )
+
+    @property
+    def is_configured(self) -> bool:
+        return bool(self.smtp_host and self.smtp_user and self.smtp_password)
+
+
+class AdminConfig(ValidatedConfigModel):
     """Начальный администратор (создаётся при первом запуске)"""
 
     login: str = "admin"
@@ -116,13 +261,16 @@ class Config(BaseSettings):
         env_nested_delimiter="_",
         case_sensitive=False,
         extra="ignore",
+        validate_default=True,
     )
 
     app: AppConfig = AppConfig()
     database: DatabaseConfig = DatabaseConfig()
     security: SecurityConfig = SecurityConfig()
+    auth: AuthConfig = AuthConfig()
     logging: LoggingConfig = LoggingConfig()
     admin: AdminConfig = AdminConfig()
+    email: EmailConfig = EmailConfig()
 
     @property
     def is_development(self) -> bool:
@@ -154,11 +302,3 @@ def setup_environment():
         level=getattr(std_logging, cfg.logging.level),
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     )
-
-
-class AdminConfig(BaseModel):
-    login: str = "admin"
-    password: str = Field(
-        default_factory=lambda: os.getenv("ADMIN_PASSWORD", "admin123")
-    )
-    email: str = "admin@musicstore.local"

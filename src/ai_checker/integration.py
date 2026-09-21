@@ -10,8 +10,8 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from database.db_manager import db_manager
-from database.models import (
+from src.database.db_manager import db_manager
+from src.database.models import (
     AiHomeworkReview,
     AiHomeworkTask,
     AiProgressReportCache,
