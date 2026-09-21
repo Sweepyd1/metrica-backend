@@ -7,6 +7,8 @@ import os
 import httpx
 from pydantic import ValidationError
 
+from src.config import cfg
+
 from .images import extract_json, prepare_image
 from .prompts import USER_PROMPT, build_progress_system_prompt, build_system_prompt
 from .schemas import AiHomeworkResult, AiProgressLlmOut
@@ -79,7 +81,7 @@ async def review_homework_openai_compat(
         ],
     }
 
-    proxy = os.getenv("OUTBOUND_PROXY_URL") or None
+    proxy = cfg.auth.outbound_proxy_url
 
     async def request_completion(request_payload: dict) -> httpx.Response:
         response: httpx.Response | None = None
@@ -186,7 +188,7 @@ async def analyze_progress_openai_compat(errors: list[dict]) -> AiProgressLlmOut
         ],
     }
 
-    proxy = os.getenv("OUTBOUND_PROXY_URL") or None
+    proxy = cfg.auth.outbound_proxy_url
 
     async def request_completion() -> httpx.Response:
         response: httpx.Response | None = None

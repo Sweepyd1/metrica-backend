@@ -165,6 +165,13 @@ class AuthConfig(ValidatedConfigModel):
     vk_token_url: str = "https://id.vk.ru/oauth2/auth"
     vk_user_info_url: str = "https://id.vk.ru/oauth2/user_info"
     oauth_http_timeout_seconds: float = 15.0
+    outbound_proxy_url: Optional[str] = Field(
+        default_factory=lambda: (
+            os.getenv("AUTH_OUTBOUND_PROXY_URL")
+            or os.getenv("OUTBOUND_PROXY_URL")
+            or ""
+        )
+    )
 
     @field_validator("cookie_samesite")
     def validate_cookie_samesite(cls, v: str) -> str:
@@ -191,6 +198,12 @@ class AuthConfig(ValidatedConfigModel):
         if v < 60:
             raise ValueError("oauth_flow_ttl_seconds must be at least 60")
         return v
+
+    @field_validator("outbound_proxy_url")
+    def normalize_outbound_proxy_url(cls, v: str | None) -> str | None:
+        if not v:
+            return None
+        return v.strip() or None
 
 
 class LoggingConfig(ValidatedConfigModel):
