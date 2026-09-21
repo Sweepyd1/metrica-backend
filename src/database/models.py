@@ -35,6 +35,11 @@ class ParentAccessStatus(str, PyEnum):
     REJECTED = "rejected"
 
 
+class InviteRole(str, PyEnum):
+    STUDENT = "student"
+    PARENT = "parent"
+
+
 class ParentChatSenderRole(str, PyEnum):
     PARENT = "parent"
     TUTOR = "tutor"
@@ -541,3 +546,50 @@ class StarTransaction(Base):
         back_populates="star_transactions"
     )
     lesson: Mapped[Optional["Lesson"]] = relationship(back_populates="star_transactions")
+
+
+class EmailVerificationToken(Base):
+    __tablename__ = "email_verification_token"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    token: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    expires_at: Mapped[datetime] = mapped_column(TIMESTAMP, nullable=False)
+    used_at: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP)
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP, server_default=func.now(), default=datetime.now
+    )
+
+    user: Mapped["User"] = relationship()
+
+
+class Invite(Base):
+    __tablename__ = "invite"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    token: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    tutor_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    role: Mapped[InviteRole] = mapped_column(
+        SAEnum(InviteRole, name="invite_role", create_constraint=True),
+        nullable=False,
+    )
+    # Обязательно для role=PARENT — какого ученика приглашённый родитель
+    # получит в доступ сразу после регистрации.
+    tutor_student_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("tutor_student.id", ondelete="CASCADE")
+    )
+    expires_at: Mapped[datetime] = mapped_column(TIMESTAMP, nullable=False)
+    used_at: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP)
+    used_by_user_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP, server_default=func.now(), default=datetime.now
+    )
+
+    tutor: Mapped["User"] = relationship(foreign_keys=[tutor_id])
+    tutor_student: Mapped[Optional["TutorStudent"]] = relationship()

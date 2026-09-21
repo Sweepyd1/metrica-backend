@@ -5,11 +5,19 @@ from typing import List
 
 from fastapi import APIRouter, Depends, File, Query, UploadFile, status
 
-from src.api.dependencies import get_current_tutor, get_db_session, get_tutor_service
+from src.api.dependencies import (
+    get_auth_service,
+    get_current_tutor,
+    get_db_session,
+    get_tutor_service,
+)
+from src.config import cfg
 from src.core.files import build_upload_path, validate_upload_file
 from src.core.repositories.file import FileRepository
+from src.core.service.auth import AuthService
 from src.core.service.tutor import TutorService
 from src.database.models import User
+from src.schemas.user import InviteCreateRequest, InviteOut, InviteRole
 from src.schemas.gamification import (
     BonusTaskCreate,
     BonusTaskOut,
@@ -85,6 +93,48 @@ async def add_student(
         star_goal=link.star_goal,
         star_reward_title=link.star_reward_title,
         earned_stars=0,
+    )
+
+
+@router.post("/students/invite", response_model=InviteOut)
+async def invite_student(
+    data: InviteCreateRequest,
+    tutor: User = Depends(get_current_tutor),
+    auth_service: AuthService = Depends(get_auth_service),
+):
+    """Одноразовая ссылка регистрации для нового ученика этого репетитора."""
+    invite = await auth_service.create_invite(
+        tutor_id=tutor.id,
+        role=InviteRole.STUDENT,
+        invitee_email=data.invitee_email,
+    )
+    return InviteOut(
+        token=invite.token,
+        url=f"{cfg.email.frontend_base_url}/register/invite/{invite.token}",
+        role=InviteRole.STUDENT,
+        expires_at=invite.expires_at,
+    )
+
+
+@router.post("/students/{tutor_student_id}/invite-parent", response_model=InviteOut)
+async def invite_parent(
+    tutor_student_id: int,
+    data: InviteCreateRequest,
+    tutor: User = Depends(get_current_tutor),
+    auth_service: AuthService = Depends(get_auth_service),
+):
+    """Одноразовая ссылка регистрации для родителя конкретного ученика."""
+    invite = await auth_service.create_invite(
+        tutor_id=tutor.id,
+        role=InviteRole.PARENT,
+        tutor_student_id=tutor_student_id,
+        invitee_email=data.invitee_email,
+    )
+    return InviteOut(
+        token=invite.token,
+        url=f"{cfg.email.frontend_base_url}/register/invite/{invite.token}",
+        role=InviteRole.PARENT,
+        expires_at=invite.expires_at,
     )
 
 

@@ -163,3 +163,51 @@ class Token(BaseModel):
     access_token: str
     refresh_token: str
     token_type: str = "bearer"
+
+
+# ---------- Подтверждение почты ----------
+class ResendVerificationRequest(BaseModel):
+    email: EmailStr
+
+
+class VerifyEmailRequest(BaseModel):
+    token: str
+
+
+class MessageOut(BaseModel):
+    message: str
+
+
+# ---------- Приглашения ----------
+class InviteRole(str, Enum):
+    STUDENT = "student"
+    PARENT = "parent"
+
+
+class InviteCreateRequest(BaseModel):
+    role: InviteRole
+    # Обязательно для role=parent — id связи ученика с этим репетитором
+    tutor_student_id: Optional[int] = None
+    # Опционально: если указать, приглашение сразу отправится на эту почту
+    invitee_email: Optional[EmailStr] = None
+
+
+class InviteOut(BaseModel):
+    token: str
+    url: str
+    role: InviteRole
+    expires_at: datetime
+
+
+class InvitePreviewOut(BaseModel):
+    role: InviteRole
+    tutor_name: str
+    student_name: Optional[str] = None
+    expires_at: datetime
+
+
+class InviteRegisterRequest(BaseModel):
+    email: EmailStr
+    password: str = Field(..., min_length=6)
+    first_name: str
+    last_name: Optional[str] = None

@@ -21,16 +21,26 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.database.models import (
     AuthIdentity,
     AuthProvider,
+    Invite,
+    InviteRole,
+    ParentAccessStatus,
     PhoneAuthCode,
     TelegramAuthSession,
     User,
     UserRole,
 )
 from src.config import cfg
+from src.core.email_policy import is_blocked_email_domain
 from src.core.repositories.auth_identity import AuthIdentityRepository
+from src.core.repositories.email_verification import EmailVerificationTokenRepository
+from src.core.repositories.invite import InviteRepository
+from src.core.repositories.parent_access import ParentAccessRepository
+from src.core.repositories.parent_student import ParentStudentRepository
 from src.core.repositories.phone_auth_code import PhoneAuthCodeRepository
 from src.core.repositories.telegram_auth_session import TelegramAuthSessionRepository
+from src.core.repositories.tutor_student import TutorStudentRepository
 from src.core.repositories.user import UserRepository
+from src.core.service.email import send_invite_email, send_verification_email
 from src.schemas.user import (
     PhoneCodeRequest,
     PhoneCodeRequestOut,
@@ -69,12 +79,22 @@ class AuthService:
         identity_repo: AuthIdentityRepository,
         phone_code_repo: PhoneAuthCodeRepository,
         telegram_auth_session_repo: TelegramAuthSessionRepository,
+        email_verification_repo: EmailVerificationTokenRepository,
+        invite_repo: InviteRepository,
+        tutor_student_repo: TutorStudentRepository,
+        parent_student_repo: ParentStudentRepository,
+        parent_access_repo: ParentAccessRepository,
     ):
         self.session = session
         self.user_repo = user_repo
         self.identity_repo = identity_repo
         self.phone_code_repo = phone_code_repo
         self.telegram_auth_session_repo = telegram_auth_session_repo
+        self.email_verification_repo = email_verification_repo
+        self.invite_repo = invite_repo
+        self.tutor_student_repo = tutor_student_repo
+        self.parent_student_repo = parent_student_repo
+        self.parent_access_repo = parent_access_repo
 
     async def commit_and_refresh(self, *instances: object) -> None:
         await self.session.commit()
@@ -1111,6 +1131,15 @@ class AuthService:
 
     async def register_with_password(self, user_data: UserCreate) -> User:
         email = self.normalize_email(user_data.email)
+        if is_blocked_email_domain(email):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "Регистрация с почтовыми сервисами вроде Gmail/Outlook/iCloud "
+                    "недоступна — используйте российскую почту (Яндекс, Mail.ru "
+                    "и т.п.) или корпоративный/учебный адрес"
+                ),
+            )
         # Проверяем, не занят ли email
         if await self.user_repo.check_exists_by_email(email):
             raise HTTPException(
@@ -1135,6 +1164,162 @@ class AuthService:
             is_verified=True,
         )
         await self.commit_and_refresh(user)
+        await self.issue_verification_email(user)
+        return user
+
+    async def issue_verification_email(self, user: User) -> None:
+        if not user.email:
+            return
+        token = secrets.token_urlsafe(32)
+        expires_at = datetime.now(timezone.utc) + timedelta(
+            hours=cfg.email.verification_ttl_hours
+        )
+        await self.email_verification_repo.create(
+            user_id=user.id, token=token, expires_at=expires_at
+        )
+        await send_verification_email(user.email, user.first_name, token)
+
+    async def resend_verification_email(self, email: str) -> None:
+        """Всегда молча успешна — не даём проверить, зарегистрирована ли почта."""
+        user = await self.user_repo.get_by_email(self.normalize_email(email))
+        if user and not user.is_email_verified:
+            await self.issue_verification_email(user)
+
+    async def verify_email(self, token: str) -> User:
+        record = await self.email_verification_repo.get_by_token(token)
+        if not record:
+            raise HTTPException(status_code=400, detail="Неверная ссылка подтверждения")
+        now = datetime.now(timezone.utc)
+        expires_at = record.expires_at
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        if record.used_at is not None or expires_at < now:
+            raise HTTPException(
+                status_code=400, detail="Ссылка подтверждения устарела или уже использована"
+            )
+        user = await self.user_repo.get(record.user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="Пользователь не найден")
+        user.is_email_verified = True
+        record.used_at = now
+        await self.commit_and_refresh(user)
+        return user
+
+    # ---------- Приглашения (ученик/родитель по ссылке от репетитора) ----------
+    async def create_invite(
+        self,
+        tutor_id: int,
+        role: InviteRole,
+        tutor_student_id: Optional[int] = None,
+        invitee_email: Optional[str] = None,
+    ) -> Invite:
+        # `role` может прийти как Pydantic-энум из схемы запроса — приводим
+        # к enum'у модели по значению, а не по классу.
+        if not isinstance(role, InviteRole):
+            role = InviteRole(getattr(role, "value", role))
+        if role == InviteRole.PARENT:
+            if tutor_student_id is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail="tutor_student_id обязателен для приглашения родителя",
+                )
+            link = await self.tutor_student_repo.get(tutor_student_id)
+            if not link or link.tutor_id != tutor_id:
+                raise HTTPException(status_code=404, detail="Ученик не найден")
+
+        token = secrets.token_urlsafe(24)
+        expires_at = datetime.now(timezone.utc) + timedelta(
+            days=cfg.email.invite_ttl_days
+        )
+        invite = await self.invite_repo.create(
+            token=token,
+            tutor_id=tutor_id,
+            role=role,
+            tutor_student_id=tutor_student_id if role == InviteRole.PARENT else None,
+            expires_at=expires_at,
+        )
+        if invitee_email:
+            tutor = await self.user_repo.get(tutor_id)
+            tutor_name = f"{tutor.first_name} {tutor.last_name or ''}".strip()
+            role_label = "ученик" if role == InviteRole.STUDENT else "родитель"
+            await send_invite_email(
+                self.normalize_email(invitee_email), tutor_name, role_label, token
+            )
+        return invite
+
+    async def _get_valid_invite(self, token: str) -> Invite:
+        invite = await self.invite_repo.get_by_token(token)
+        if not invite:
+            raise HTTPException(status_code=404, detail="Приглашение не найдено")
+        now = datetime.now(timezone.utc)
+        expires_at = invite.expires_at
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        if invite.used_at is not None or expires_at < now:
+            raise HTTPException(
+                status_code=410, detail="Приглашение больше не действительно"
+            )
+        return invite
+
+    async def get_invite_preview(self, token: str) -> Invite:
+        return await self._get_valid_invite(token)
+
+    async def register_via_invite(self, token: str, user_data: UserCreate) -> User:
+        invite = await self._get_valid_invite(token)
+
+        email = self.normalize_email(user_data.email)
+        if is_blocked_email_domain(email):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Регистрация с почтовыми сервисами вроде Gmail/Outlook/iCloud "
+                    "недоступна — используйте российскую почту (Яндекс, Mail.ru "
+                    "и т.п.) или корпоративный/учебный адрес"
+                ),
+            )
+        if await self.user_repo.check_exists_by_email(email):
+            raise HTTPException(
+                status_code=400, detail="Пользователь с таким email уже существует"
+            )
+
+        role = UserRole.STUDENT if invite.role == InviteRole.STUDENT else UserRole.PARENT
+        hashed_password = self.get_password_hash(user_data.password)
+        user = await self.create_user(
+            email=email,
+            password_hash=hashed_password,
+            first_name=user_data.first_name,
+            last_name=user_data.last_name,
+            role=role.value,
+            is_email_verified=False,
+        )
+        await self.ensure_identity(
+            user, AuthProvider.PASSWORD, email, provider_email=email, is_verified=True
+        )
+
+        if invite.role == InviteRole.STUDENT:
+            await self.tutor_student_repo.create(
+                tutor_id=invite.tutor_id,
+                student_id=user.id,
+                subject=None,
+                student_inf=None,
+            )
+        else:
+            tutor_student = invite.tutor_student
+            await self.parent_student_repo.create(
+                parent_id=user.id, student_id=tutor_student.student_id
+            )
+            await self.parent_access_repo.create(
+                parent_id=user.id,
+                tutor_student_id=invite.tutor_student_id,
+                status=ParentAccessStatus.APPROVED,
+                reviewed_by=invite.tutor_id,
+            )
+
+        invite.used_at = datetime.now(timezone.utc)
+        invite.used_by_user_id = user.id
+
+        await self.commit_and_refresh(user)
+        await self.issue_verification_email(user)
         return user
 
     async def authenticate(self, email: str, password: str) -> Optional[User]:
@@ -1149,6 +1334,11 @@ class AuthService:
             return None
         if not user.is_active:
             return None
+        if not user.is_email_verified:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="EMAIL_NOT_VERIFIED",
+            )
         await self.ensure_identity(
             user,
             AuthProvider.PASSWORD,

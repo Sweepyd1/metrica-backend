@@ -6,8 +6,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.repositories.auth_identity import AuthIdentityRepository
 from src.core.repositories.bonus_task import BonusTaskRepository
+from src.core.repositories.email_verification import EmailVerificationTokenRepository
 from src.core.repositories.file import FileRepository
 from src.core.repositories.group import GroupRepository
+from src.core.repositories.invite import InviteRepository
 from src.core.repositories.lesson import LessonRepository
 from src.core.repositories.lesson_file import LessonFileRepository
 from src.core.repositories.parent_access import ParentAccessRepository
@@ -44,6 +46,11 @@ async def get_auth_service(
         identity_repo=AuthIdentityRepository(db),
         phone_code_repo=PhoneAuthCodeRepository(db),
         telegram_auth_session_repo=TelegramAuthSessionRepository(db),
+        email_verification_repo=EmailVerificationTokenRepository(db),
+        invite_repo=InviteRepository(db),
+        tutor_student_repo=TutorStudentRepository(db),
+        parent_student_repo=ParentStudentRepository(db),
+        parent_access_repo=ParentAccessRepository(db),
     )
 
 

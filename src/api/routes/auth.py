@@ -6,9 +6,13 @@ from typing import Any
 
 from src.config import cfg
 from src.schemas.user import (
+    InvitePreviewOut,
+    InviteRegisterRequest,
+    MessageOut,
     PhoneCodeRequest,
     PhoneCodeRequestOut,
     PhoneCodeVerify,
+    ResendVerificationRequest,
     TelegramMessageAuthComplete,
     TelegramMessageAuthStart,
     TelegramMessageAuthStartOut,
@@ -19,6 +23,7 @@ from src.schemas.user import (
     UserLogin,
     UserRole,
     UserOut,
+    VerifyEmailRequest,
 )
 from src.core.service.auth import AuthService
 from src.api.dependencies import get_auth_service, get_current_user
@@ -80,26 +85,78 @@ def clear_oauth_flow_cookie(response: Response, provider: str) -> None:
 @router.post("/register", response_model=UserOut, status_code=status.HTTP_201_CREATED)
 async def register(
     user_data: UserCreate,
-    response: Response,
     auth_service: AuthService = Depends(get_auth_service),
 ) -> Any:
-    """Регистрация нового пользователя и автоматический вход"""
+    """Регистрация нового пользователя. Письмо с подтверждением почты
+    отправляется автоматически; войти можно только после подтверждения."""
     user = await auth_service.register_with_password(user_data)
-    # Генерируем токены и устанавливаем куки
-    tokens = await auth_service.create_tokens(user.id)
-    set_auth_cookies(response, tokens["access_token"], tokens["refresh_token"])
     return user
 
 
 @router.post("/register/password", response_model=UserOut, status_code=status.HTTP_201_CREATED)
 async def register_password(
     user_data: UserCreate,
-    response: Response,
     auth_service: AuthService = Depends(get_auth_service),
 ) -> Any:
     user = await auth_service.register_with_password(user_data)
+    return user
+
+
+@router.post("/resend-verification", response_model=MessageOut)
+async def resend_verification(
+    data: ResendVerificationRequest,
+    auth_service: AuthService = Depends(get_auth_service),
+) -> Any:
+    await auth_service.resend_verification_email(data.email)
+    return {"message": "Если такая почта зарегистрирована, письмо отправлено"}
+
+
+@router.post("/verify-email", response_model=UserOut)
+async def verify_email(
+    data: VerifyEmailRequest,
+    response: Response,
+    auth_service: AuthService = Depends(get_auth_service),
+) -> Any:
+    """Подтверждает почту по токену из письма и сразу логинит пользователя."""
+    user = await auth_service.verify_email(data.token)
     tokens = await auth_service.create_tokens(user.id)
     set_auth_cookies(response, tokens["access_token"], tokens["refresh_token"])
+    return user
+
+
+@router.get("/invite/{token}", response_model=InvitePreviewOut)
+async def preview_invite(
+    token: str,
+    auth_service: AuthService = Depends(get_auth_service),
+) -> Any:
+    """Публичная информация о приглашении — для страницы регистрации по ссылке."""
+    invite = await auth_service.get_invite_preview(token)
+    tutor_name = f"{invite.tutor.first_name} {invite.tutor.last_name or ''}".strip()
+    student_name = None
+    if invite.tutor_student is not None:
+        student = invite.tutor_student.student
+        student_name = f"{student.first_name} {student.last_name or ''}".strip()
+    return InvitePreviewOut(
+        role=invite.role.value,
+        tutor_name=tutor_name,
+        student_name=student_name,
+        expires_at=invite.expires_at,
+    )
+
+
+@router.post(
+    "/register/invite/{token}",
+    response_model=UserOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def register_via_invite(
+    token: str,
+    user_data: InviteRegisterRequest,
+    auth_service: AuthService = Depends(get_auth_service),
+) -> Any:
+    """Регистрация по ссылке-приглашению от репетитора — роль и привязка
+    к репетитору (и, для родителя, к ученику) выставляются автоматически."""
+    user = await auth_service.register_via_invite(token, user_data)
     return user
 
 

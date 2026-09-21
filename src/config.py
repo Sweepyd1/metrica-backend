@@ -214,6 +214,36 @@ class LoggingConfig(ValidatedConfigModel):
         return v.upper()
 
 
+class EmailConfig(ValidatedConfigModel):
+    """SMTP для писем подтверждения почты и приглашений"""
+
+    smtp_host: str = Field(default_factory=lambda: os.getenv("EMAIL_SMTP_HOST", ""))
+    smtp_port: int = Field(
+        default_factory=lambda: int(os.getenv("EMAIL_SMTP_PORT", "465"))
+    )
+    smtp_user: str = Field(default_factory=lambda: os.getenv("EMAIL_SMTP_USER", ""))
+    smtp_password: str = Field(
+        default_factory=lambda: os.getenv("EMAIL_SMTP_PASSWORD", "")
+    )
+    smtp_from: str = Field(default_factory=lambda: os.getenv("EMAIL_SMTP_FROM", ""))
+    smtp_use_ssl: bool = Field(
+        default_factory=lambda: os.getenv("EMAIL_SMTP_USE_SSL", "true").lower()
+        == "true"
+    )
+    verification_ttl_hours: int = 24
+    invite_ttl_days: int = 14
+    # Базовый URL фронтенда для ссылок в письмах (подтверждение, инвайты)
+    frontend_base_url: str = Field(
+        default_factory=lambda: os.getenv(
+            "EMAIL_FRONTEND_BASE_URL", "http://localhost:5173"
+        )
+    )
+
+    @property
+    def is_configured(self) -> bool:
+        return bool(self.smtp_host and self.smtp_user and self.smtp_password)
+
+
 class AdminConfig(ValidatedConfigModel):
     """Начальный администратор (создаётся при первом запуске)"""
 
@@ -240,6 +270,7 @@ class Config(BaseSettings):
     auth: AuthConfig = AuthConfig()
     logging: LoggingConfig = LoggingConfig()
     admin: AdminConfig = AdminConfig()
+    email: EmailConfig = EmailConfig()
 
     @property
     def is_development(self) -> bool:
