@@ -18,6 +18,9 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
+invite_role = sa.Enum("STUDENT", "PARENT", name="invite_role")
+
+
 def upgrade() -> None:
     """Upgrade schema."""
     op.create_table(
@@ -37,9 +40,6 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("token", name="uq_email_verification_token_token"),
     )
-
-    invite_role = sa.Enum("STUDENT", "PARENT", name="invite_role")
-    invite_role.create(op.get_bind(), checkfirst=True)
 
     op.create_table(
         "invite",
@@ -72,5 +72,5 @@ def upgrade() -> None:
 def downgrade() -> None:
     """Downgrade schema."""
     op.drop_table("invite")
-    sa.Enum(name="invite_role").drop(op.get_bind(), checkfirst=True)
+    invite_role.drop(op.get_bind(), checkfirst=True)
     op.drop_table("email_verification_token")
