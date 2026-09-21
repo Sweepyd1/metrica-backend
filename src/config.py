@@ -8,7 +8,7 @@ from urllib.parse import quote_plus
 from dotenv import load_dotenv
 
 
-load_dotenv()
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 
 class DatabaseConfig(BaseModel):

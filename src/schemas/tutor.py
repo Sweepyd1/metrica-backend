@@ -100,6 +100,8 @@ class TutorLessonSummary(BaseModel):
     submitted_at: Optional[dt.datetime] = None
     homework_grade: Optional[float] = None
     homework_stars: float = 0
+    created_at: Optional[dt.datetime] = None
+    submission_id: Optional[int] = None
 
 
 class TutorLessonListOut(BaseModel):

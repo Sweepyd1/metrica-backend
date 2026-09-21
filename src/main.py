@@ -3,11 +3,12 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 import uvicorn
-from api.routes import auth, parent, student, tutor
+from api.routes import ai_review, auth, parent, student, tutor
 
 app = FastAPI()
 app.include_router(auth.router)
 app.include_router(tutor.router)
+app.include_router(ai_review.router)
 app.include_router(student.router)
 app.include_router(parent.router)
 

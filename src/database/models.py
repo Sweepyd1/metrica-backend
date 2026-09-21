@@ -13,6 +13,7 @@ from sqlalchemy import (
     ForeignKey,
     UniqueConstraint,
     TIMESTAMP,
+    JSON,
     func,
     Enum as SAEnum,
 )
@@ -40,6 +41,13 @@ class LessonFileKind(str, PyEnum):
 class SubmissionStatus(str, PyEnum):
     SUBMITTED = "submitted"
     CHECKED = "checked"
+
+
+class AiReviewStatus(str, PyEnum):
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
 
 
 # --- Tables ---
@@ -164,6 +172,9 @@ class Lesson(Base):
     )
     homework_deadline: Mapped[Optional[date]] = mapped_column(Date)
     parent_comment: Mapped[Optional[str]] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP, server_default=func.now(), default=datetime.now
+    )
 
     tutor_student: Mapped["TutorStudent"] = relationship(back_populates="lessons")
     lesson_files: Mapped[List["LessonFile"]] = relationship(
@@ -236,6 +247,82 @@ class LessonFile(Base):
     )
     checked_file: Mapped[Optional["File"]] = relationship(
         foreign_keys=[checked_file_id]
+    )
+
+
+class AiHomeworkReview(Base):
+    __tablename__ = "ai_homework_review"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    lesson_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("lesson.id", ondelete="CASCADE"), unique=True, nullable=False
+    )
+    tutor_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    student_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    status: Mapped[AiReviewStatus] = mapped_column(
+        SAEnum(AiReviewStatus, name="ai_review_status", create_constraint=True),
+        nullable=False,
+        default=AiReviewStatus.PENDING,
+    )
+    mode: Mapped[str] = mapped_column(String(30), nullable=False, default="school")
+    provider: Mapped[str] = mapped_column(String(50), nullable=False)
+    model: Mapped[str] = mapped_column(String(200), nullable=False)
+    usage_date: Mapped[date] = mapped_column(Date, nullable=False)
+    reserved_task_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    task_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    result_json: Mapped[Optional[dict]] = mapped_column(JSON)
+    error_message: Mapped[Optional[str]] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP, server_default=func.now(), default=datetime.now
+    )
+    started_at: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP)
+
+    lesson: Mapped["Lesson"] = relationship()
+    tasks: Mapped[List["AiHomeworkTask"]] = relationship(
+        back_populates="review", cascade="all, delete-orphan"
+    )
+
+
+class AiHomeworkTask(Base):
+    __tablename__ = "ai_homework_task"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    review_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("ai_homework_review.id", ondelete="CASCADE"), nullable=False
+    )
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
+    task_label: Mapped[str] = mapped_column(Text, nullable=False)
+    transcription: Mapped[str] = mapped_column(Text, nullable=False)
+    is_correct: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    task_types: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    topic_groups: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    errors: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP, server_default=func.now(), default=datetime.now
+    )
+
+    review: Mapped["AiHomeworkReview"] = relationship(back_populates="tasks")
+
+
+class AiProgressReportCache(Base):
+    __tablename__ = "ai_progress_report_cache"
+    __table_args__ = (
+        UniqueConstraint("student_id", "up_to_homework_count", name="uq_ai_progress_student_upto"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    student_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    up_to_homework_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    report_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP, server_default=func.now(), default=datetime.now
     )
 
 

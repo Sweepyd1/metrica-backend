@@ -750,6 +750,8 @@ class TutorService:
             submitted_at=submission.created_at if submission else None,
             homework_grade=submission.grade if submission else None,
             homework_stars=submission.stars_awarded if submission else 0,
+            created_at=lesson.created_at,
+            submission_id=submission.id if submission else None,
         )
 
     def _build_lesson_detail(self, lesson: Lesson) -> TutorLessonDetail:
@@ -805,6 +807,8 @@ class TutorService:
             submitted_at=submission.created_at if submission else None,
             homework_grade=submission.grade if submission else None,
             homework_stars=submission.stars_awarded if submission else 0,
+            created_at=lesson.created_at,
+            submission_id=submission.id if submission else None,
         )
 
     def _split_lesson_files(
