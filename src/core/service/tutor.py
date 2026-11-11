@@ -318,6 +318,7 @@ class TutorService:
             subject=data.subject.strip() if data.subject else None,
             topic=data.topic,
             meet_link=data.meet_link,
+            homework_text=(data.homework_text.strip() or None) if data.homework_text else None,
             homework_deadline=data.homework_deadline,
             homework_done=False,
         )
@@ -353,6 +354,8 @@ class TutorService:
         lesson.subject = data.subject.strip() if data.subject else None
         lesson.topic = data.topic
         lesson.meet_link = data.meet_link
+        if "homework_text" in data.model_fields_set:
+            lesson.homework_text = (data.homework_text.strip() or None) if data.homework_text else None
         lesson.homework_deadline = data.homework_deadline
 
         await self.lesson_file_repo.sync_lesson_files(
@@ -989,6 +992,7 @@ class TutorService:
             topic=lesson.topic,
             meet_link=lesson.meet_link,
             materials=[self._file_to_schema(item.file) for item in materials],
+            homework_text=lesson.homework_text,
             homework_task_files=[
                 self._file_to_schema(item.file) for item in homework_task_files
             ],
@@ -1046,6 +1050,7 @@ class TutorService:
             topic=lesson.topic,
             meet_link=lesson.meet_link,
             materials=[self._file_to_schema(item.file) for item in materials],
+            homework_text=lesson.homework_text,
             homework_task_files=[
                 self._file_to_schema(item.file) for item in homework_task_files
             ],
@@ -1091,6 +1096,7 @@ class TutorService:
             topic=lesson.topic,
             meet_link=lesson.meet_link,
             materials=[self._file_to_schema(item.file) for item in materials],
+            homework_text=lesson.homework_text,
             homework_task_files=[
                 self._file_to_schema(item.file) for item in homework_task_files
             ],

@@ -65,6 +65,7 @@ def to_lesson_out(lesson) -> LessonOut:
         topic=lesson.topic,
         meet_link=lesson.meet_link,
         homework_done=lesson.homework_done,
+        homework_text=lesson.homework_text,
         homework_deadline=lesson.homework_deadline,
     )
 

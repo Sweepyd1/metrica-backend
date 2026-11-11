@@ -21,6 +21,7 @@ class StudentLessonSummary(BaseModel):
     tutor_name: str
     meet_link: Optional[str] = None
     materials: List[LessonAttachmentOut] = Field(default_factory=list)
+    homework_text: Optional[str] = Field(default=None, max_length=10000)
     homework_task_files: List[LessonAttachmentOut] = Field(default_factory=list)
     homework_deadline: Optional[dt.date] = None
     homework_deadline_missed: bool = False

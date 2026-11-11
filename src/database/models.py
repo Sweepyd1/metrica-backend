@@ -307,6 +307,7 @@ class Lesson(Base):
     homework_done: Mapped[bool] = mapped_column(
         Boolean, server_default="false", default=False
     )
+    homework_text: Mapped[Optional[str]] = mapped_column(Text)
     homework_deadline: Mapped[Optional[date]] = mapped_column(Date)
     parent_comment: Mapped[Optional[str]] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(

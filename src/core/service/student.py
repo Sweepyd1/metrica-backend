@@ -185,6 +185,7 @@ class StudentService:
             tutor_name=tutor_name,
             meet_link=lesson.meet_link,
             materials=[self._file_to_schema(item.file) for item in materials],
+            homework_text=lesson.homework_text,
             homework_task_files=[
                 self._file_to_schema(item.file) for item in homework_task_files
             ],
@@ -233,6 +234,7 @@ class StudentService:
             tutor_name=tutor_name,
             meet_link=lesson.meet_link,
             materials=[self._file_to_schema(item.file) for item in materials],
+            homework_text=lesson.homework_text,
             homework_task_files=[
                 self._file_to_schema(item.file) for item in homework_task_files
             ],

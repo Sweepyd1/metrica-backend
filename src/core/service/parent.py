@@ -373,6 +373,7 @@ class ParentService:
             subject=lesson.subject,
             class_info=tutor_student.student_inf,
             materials=[self._file_to_schema(item.file) for item in materials],
+            homework_text=lesson.homework_text,
             homework_task_files=[
                 self._file_to_schema(item.file) for item in homework_task_files
             ],

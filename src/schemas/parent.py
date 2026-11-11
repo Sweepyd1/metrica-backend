@@ -79,6 +79,7 @@ class ParentLessonSummary(BaseModel):
     subject: Optional[str] = None
     class_info: Optional[str] = None
     materials: list[ParentLessonAttachmentOut] = Field(default_factory=list)
+    homework_text: Optional[str] = Field(default=None, max_length=10000)
     homework_task_files: list[ParentLessonAttachmentOut] = Field(default_factory=list)
     parent_message_files: list[ParentLessonAttachmentOut] = Field(default_factory=list)
     parent_comment: Optional[str] = None

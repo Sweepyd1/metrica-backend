@@ -78,6 +78,7 @@ class LessonCreate(BaseModel):
     meet_link: Optional[str] = None
     homework_deadline: Optional[dt.date] = None
     material_file_ids: List[int] = Field(default_factory=list)
+    homework_text: Optional[str] = Field(default=None, max_length=10000)
     homework_task_file_ids: List[int] = Field(default_factory=list)
 
 
@@ -94,6 +95,7 @@ class LessonOut(BaseModel):
     topic: Optional[str]
     meet_link: Optional[str]
     homework_done: bool
+    homework_text: Optional[str] = None
     homework_deadline: Optional[dt.date]
 
 
@@ -116,6 +118,7 @@ class TutorLessonSummary(BaseModel):
     topic: Optional[str] = None
     meet_link: Optional[str] = None
     materials: List[TutorLessonAttachmentOut] = Field(default_factory=list)
+    homework_text: Optional[str] = Field(default=None, max_length=10000)
     homework_task_files: List[TutorLessonAttachmentOut] = Field(default_factory=list)
     parent_message_files: List[TutorLessonAttachmentOut] = Field(default_factory=list)
     parent_comment: Optional[str] = None
@@ -159,6 +162,7 @@ class TutorLessonProgressItem(BaseModel):
     topic: Optional[str] = None
     meet_link: Optional[str] = None
     materials: List[TutorLessonAttachmentOut] = Field(default_factory=list)
+    homework_text: Optional[str] = Field(default=None, max_length=10000)
     homework_task_files: List[TutorLessonAttachmentOut] = Field(default_factory=list)
     homework_deadline: Optional[dt.date] = None
     homework_done: bool

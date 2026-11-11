@@ -161,6 +161,28 @@ async def get_ai_review_state(
     )
 
 
+async def get_student_ai_review_state(
+    session: AsyncSession, student_id: int, lesson_id: int
+) -> AiReviewStateOut:
+    owned_lesson_id = await session.scalar(
+        select(Lesson.id)
+        .join(TutorStudent, Lesson.tutor_student_id == TutorStudent.id)
+        .where(Lesson.id == lesson_id, TutorStudent.student_id == student_id)
+    )
+    if owned_lesson_id is None:
+        raise LookupError("Домашнее задание не найдено.")
+
+    review = await session.scalar(
+        select(AiHomeworkReview).where(
+            AiHomeworkReview.lesson_id == lesson_id,
+            AiHomeworkReview.student_id == student_id,
+        )
+    )
+    if review is None:
+        return AiReviewStateOut(lesson_id=lesson_id, status="not_started", available=False)
+    return _to_state(review, available=False)
+
+
 async def _ordered_completed_reviews(
     session: AsyncSession, *, student_id: int, tutor_id: int
 ) -> list[AiHomeworkReview]:

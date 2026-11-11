@@ -3,7 +3,11 @@ import shutil
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 
-from src.api.dependencies import get_current_student, get_student_service
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.ai_checker.integration import get_student_ai_review_state
+from src.ai_checker.schemas import AiReviewStateOut
+from src.api.dependencies import get_current_student, get_student_service, get_db_session
 from src.core.files import build_upload_path, validate_upload_file
 from src.core.service.student import StudentService
 from src.database.models import User
@@ -32,6 +36,18 @@ async def lesson_detail(
     service: StudentService = Depends(get_student_service),
 ):
     return await service.get_lesson_detail(student.id, lesson_id)
+
+
+@router.get("/lessons/{lesson_id}/ai-review", response_model=AiReviewStateOut)
+async def ai_review_state(
+    lesson_id: int,
+    student: User = Depends(get_current_student),
+    session: AsyncSession = Depends(get_db_session),
+):
+    try:
+        return await get_student_ai_review_state(session, student.id, lesson_id)
+    except LookupError as error:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(error)) from error
 
 
 @router.get("/gamification", response_model=list[GamificationOut])
