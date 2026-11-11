@@ -4,6 +4,8 @@ from typing import List, Optional
 
 from sqlalchemy import (
     Boolean,
+    Column,
+    Table,
     Date,
     Enum as SAEnum,
     Float,
@@ -22,6 +24,13 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 class Base(DeclarativeBase):
     pass
+
+
+lesson_review_file = Table(
+    "lesson_review_file", Base.metadata,
+    Column("lesson_id", Integer, ForeignKey("lesson.id", ondelete="CASCADE"), primary_key=True),
+    Column("file_id", Integer, ForeignKey("file.id", ondelete="CASCADE"), primary_key=True),
+)
 
 
 class UserRole(str, PyEnum):
@@ -317,6 +326,9 @@ class Lesson(Base):
     tutor_student: Mapped["TutorStudent"] = relationship(back_populates="lessons")
     lesson_files: Mapped[List["LessonFile"]] = relationship(
         back_populates="lesson", cascade="all, delete-orphan"
+    )
+    review_files: Mapped[List["File"]] = relationship(
+        secondary=lesson_review_file, lazy="selectin", order_by="File.id"
     )
     star_transactions: Mapped[List["StarTransaction"]] = relationship(
         back_populates="lesson"

@@ -2,6 +2,7 @@ from datetime import date, datetime, time
 
 from fastapi import HTTPException, status
 
+from src.core.review_files import get_review_files
 from src.core.repositories.lesson import LessonRepository
 from src.core.repositories.parent_access import ParentAccessRepository
 from src.core.repositories.parent_chat_message import ParentChatMessageRepository
@@ -353,9 +354,7 @@ class ParentService:
             else None
         )
         checked_files = [
-            self._file_to_schema(item.checked_file)
-            for item in submissions
-            if item.checked_file
+            self._file_to_schema(file) for file in get_review_files(lesson, submissions)
         ]
         return ParentLessonSummary(
             id=lesson.id,

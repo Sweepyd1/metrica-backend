@@ -2,6 +2,7 @@ from datetime import date, datetime, time
 
 from fastapi import HTTPException, status
 
+from src.core.review_files import get_review_files
 from src.core.repositories.bonus_task import BonusTaskRepository
 from src.core.repositories.file import FileRepository
 from src.core.repositories.lesson import LessonRepository
@@ -115,6 +116,7 @@ class StudentService:
                 )
             )
 
+        lesson.review_files = []
         lesson.homework_done = True
         deadline_missed = (
             lesson.homework_deadline is not None
@@ -171,9 +173,7 @@ class StudentService:
             else None
         )
         checked_files = [
-            self._file_to_schema(item.checked_file)
-            for item in submissions
-            if item.checked_file
+            self._file_to_schema(file) for file in get_review_files(lesson, submissions)
         ]
         return StudentLessonSummary(
             id=lesson.id,
@@ -220,9 +220,7 @@ class StudentService:
             else None
         )
         checked_files = [
-            self._file_to_schema(item.checked_file)
-            for item in submissions
-            if item.checked_file
+            self._file_to_schema(file) for file in get_review_files(lesson, submissions)
         ]
         return StudentLessonDetail(
             id=lesson.id,

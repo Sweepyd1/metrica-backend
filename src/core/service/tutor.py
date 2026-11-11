@@ -4,6 +4,7 @@ from typing import Any, Dict, List
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.core.review_files import get_review_files
 from src.core.repositories.bonus_task import BonusTaskRepository
 from src.core.repositories.file import FileRepository
 from src.core.repositories.group import GroupRepository
@@ -551,7 +552,7 @@ class TutorService:
                 status_code=status.HTTP_404_NOT_FOUND, detail="Submission not found"
             )
 
-        checked_file_ids = list(check_data.checked_file_ids)
+        checked_file_ids = list(dict.fromkeys(check_data.checked_file_ids))
         if check_data.checked_file_id is not None and not checked_file_ids:
             checked_file_ids.append(check_data.checked_file_id)
 
@@ -581,6 +582,7 @@ class TutorService:
                 checked_files[index].id if index < len(checked_files) else None
             )
 
+        sub.lesson.review_files = checked_files
         await self.lesson_file_repo.save_many(lesson_submissions)
         checked_submission = await self.lesson_file_repo.get_submission_for_tutor(
             tutor_id, submission_id
@@ -770,9 +772,7 @@ class TutorService:
             self._file_to_schema(item.file) for item in submissions if item.file
         ]
         checked_files = [
-            self._file_to_schema(item.checked_file)
-            for item in submissions
-            if item.checked_file
+            self._file_to_schema(file) for file in get_review_files(lesson, submissions)
         ]
         return SubmissionOut(
             id=sub.id,
@@ -976,9 +976,7 @@ class TutorService:
             else None
         )
         checked_files = [
-            self._file_to_schema(item.checked_file)
-            for item in submissions
-            if item.checked_file
+            self._file_to_schema(file) for file in get_review_files(lesson, submissions)
         ]
         return TutorLessonSummary(
             id=lesson.id,
@@ -1034,9 +1032,7 @@ class TutorService:
             else None
         )
         checked_files = [
-            self._file_to_schema(item.checked_file)
-            for item in submissions
-            if item.checked_file
+            self._file_to_schema(file) for file in get_review_files(lesson, submissions)
         ]
         return TutorLessonDetail(
             id=lesson.id,
