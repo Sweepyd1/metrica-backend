@@ -89,7 +89,7 @@ class TutorService:
         self.bonus_task_repo = bonus_task_repo
 
     async def add_student(self, tutor_id: int, email: str) -> TutorStudent:
-        student = await self.user_repo.get_by_email(email)
+        student = await self.user_repo.get_by_email(email.strip().lower())
         if not student or student.role != UserRole.STUDENT:
             raise HTTPException(
                 status_code=404, detail="Не удалось найти ученика с таким email"
